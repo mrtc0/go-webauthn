@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js" integrity="sha384-SijkeUvZZs1bto8G/GPfjLDAg4FRZB5yGFAdMT5T7n3bMnkfFMEhE/h11ClJPNFR" crossorigin="anonymous"></script>
+</head>
+<body>
+   <script>
+        const registration = async () => {
+            const data = await fetch('/webauthn/registration/start');
+            const json = await data.json();
+            console.log(json)
+
+            const attResp = await SimpleWebAuthnBrowser.startRegistration(json)
+            console.log(attResp)
+
+            const verificationResp = await fetch('/webauthn/registration/finish', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(attResp)
+            })
+
+            const verificationJSON = await verificationResp.json();
+            console.log(verificationJSON)
+        }
+
+        registration();
+   </script> 
+</body>
+</html>
