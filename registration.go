@@ -182,8 +182,14 @@ func CreateCredential(user *WebAuthnUser, session *Session, credential *Registra
 		return nil, errors.New("BE bit not set, but BS bit set")
 	}
 
-	// TODO: Step 17. If the Relying Party uses the credential’s backup eligibility to inform its user experience flows and/or policies, evaluate the BE bit of the flags in authData.
-	// TODO: Step 18. If the Relying Party uses the credential’s backup state to inform its user experience flows and/or policies, evaluate the BS bit of the flags in authData.
+	/*
+		Steps 17 and 18 are performed by the RP for user experience and are not the responsibility of go-webauthn.
+			Step 17. If the Relying Party uses the credential’s backup eligibility to inform its user experience flows and/or policies,
+					 evaluate the BE bit of the flags in authData.
+			Step 18. If the Relying Party uses the credential’s backup state to inform its user experience flows and/or policies,
+					 evaluate the BS bit of the flags in authData.
+	*/
+
 	// Step 19. Verify that the "alg" parameter in the credential public key in authData matches
 	// 			the alg attribute of one of the items in `options.pubKeyCredParams``.
 	if err := authenticatorData.AttestedCredentialData.VerifyPublicKeyAlgParams(defaultCredentialParameters()); err != nil {
@@ -191,9 +197,18 @@ func CreateCredential(user *WebAuthnUser, session *Session, credential *Registra
 	}
 
 	// TODO: Step 20. Verify that the values of the client extension outputs in clientExtensionResults and the authenticator extension outputs in the extensions in authData are as expected, considering the client extension input values that were given in options.extensions and any specific policy of the Relying Party regarding unsolicited extensions, i.e., those that were not specified as part of options.extensions. In the general case, the meaning of "are as expected" is specific to the Relying Party and which extensions are in use.
-	// TODO: Step 21. Determine the attestation statement format by performing a USASCII case-sensitive match on fmt against the set of supported WebAuthn Attestation Statement Format Identifier values. An up-to-date list of registered WebAuthn Attestation Statement Format Identifier values is maintained in the IANA "WebAuthn Attestation Statement Format Identifiers" registry [IANA-WebAuthn-Registries] established by [RFC8809].
 
-	// TODO: Step 22. Verify that attStmt is a correct attestation statement, conveying a valid attestation signature, by using the attestation statement format fmt’s verification procedure given attStmt, authData and hash.
+	// Step 21. Determine the attestation statement format by performing a USASCII case-sensitive match on fmt against the set of supported WebAuthn Attestation Statement Format Identifier values. An up-to-date list of registered WebAuthn Attestation Statement Format Identifier values is maintained in the IANA "WebAuthn Attestation Statement Format Identifiers" registry [IANA-WebAuthn-Registries] established by [RFC8809].
+	verifier, err := DetermineAttestaionStatement(attestationObject.Format)
+	if err != nil {
+		return nil, fmt.Errorf("failed to determine attestation statement: %w", err)
+	}
+	// Step 22. Verify that attStmt is a correct attestation statement, conveying a valid attestation signature, by using the attestation statement format fmt’s verification procedure given attStmt, authData and hash.
+	_, _, err = verifier.Verify()
+	if err != nil {
+		return nil, fmt.Errorf("failed to verify attestation statement: %w", err)
+	}
+
 	fmt.Printf("hash: %x\n", hash)
 	// TODO: Step 23. If validation is successful, obtain a list of acceptable trust anchors (i.e. attestation root certificates) for that attestation type and attestation statement format fmt, from a trusted source or from policy. For example, the FIDO Metadata Service [FIDOMetadataService] provides one way to obtain such information, using the aaguid in the attestedCredentialData in authData.
 	// TODO: Step 24. Assess the attestation trustworthiness using the outputs of the verification procedure in step 21, as follows:
