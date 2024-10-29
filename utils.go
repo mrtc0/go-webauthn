@@ -1,6 +1,7 @@
 package webauthn
 
 import (
+	"crypto/subtle"
 	"encoding/base64"
 )
 
@@ -19,4 +20,8 @@ func (b Base64URLEncodedByte) Decode() ([]byte, error) {
 
 func (b Base64URLEncodedByte) String() string {
 	return base64.RawURLEncoding.EncodeToString(b)
+}
+
+func SecureCompare(given string, actual string) bool {
+	return subtle.ConstantTimeCompare([]byte(given), []byte(actual)) == 1
 }

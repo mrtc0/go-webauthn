@@ -1,6 +1,10 @@
 package webauthn
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/fxamacker/cbor/v2"
+)
 
 // https://www.iana.org/assignments/webauthn/webauthn.xhtml
 type AttestationFormat string
@@ -79,7 +83,7 @@ func (n *NoneAttestationStatementVerifier) Verify() (attestationType string, x50
 	return "None", []string{}, nil
 }
 
-func DetermineAttestaionStatement(format string) (AttestationStatementVerifier, error) {
+func DetermineAttestaionStatement(format string, attStmt cbor.RawMessage, authData, hash []byte) (AttestationStatementVerifier, error) {
 	switch AttestationFormat(format) {
 	case AttestationFormatPacked:
 		return &PackedAttestationStatementVerifier{}, nil
