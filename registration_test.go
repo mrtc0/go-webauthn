@@ -35,4 +35,40 @@ func TestRelyingParty_CreateOptionsForRegistrationCelemony(t *testing.T) {
 	assert.Equal(t, rpConfig.Origin, session.RPID)
 	assert.Equal(t, session.Challenge, creationOptions.Challenge.String())
 	assert.GreaterOrEqual(t, len(session.Challenge), 16)
+
+	t.Run("with options", func(t *testing.T) {
+		testCases := map[string]struct {
+			opt        webauthn.RegistrationCeremonyOption
+			expectFunc func(t *testing.T, creationOptions *webauthn.PublicKeyCredentialCreationOptions)
+		}{
+			"WithAuthenticatorSelection": {
+				opt: webauthn.WithAuthenticatorSelection(
+					webauthn.AuthenticatorSelectionCriteria{
+						AuthenticatorAttachment: "platform",
+						ResidentKey:             "preferred",
+						RequireResidentKey:      true,
+						UserVerification:        "required",
+					},
+				),
+				expectFunc: func(t *testing.T, creationOptions *webauthn.PublicKeyCredentialCreationOptions) {
+					assert.Equal(t, "platform", creationOptions.AuthenticatorSelection.AuthenticatorAttachment)
+					assert.Equal(t, "preferred", creationOptions.AuthenticatorSelection.ResidentKey)
+					assert.True(t, creationOptions.AuthenticatorSelection.RequireResidentKey)
+					assert.Equal(t, "required", creationOptions.AuthenticatorSelection.UserVerification)
+				},
+			},
+		}
+
+		for name, tc := range testCases {
+			tc := tc
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+
+				rp := webauthn.NewRelyingParty(rpConfig)
+				creationOptions, _, err := rp.CreateOptionsForRegistrationCeremony(user, tc.opt)
+				assert.NoError(t, err)
+				tc.expectFunc(t, creationOptions)
+			})
+		}
+	})
 }
