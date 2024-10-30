@@ -73,7 +73,7 @@ func (rp *RelyingParty) CreateOptionsForRegistrationCeremony(user *WebAuthnUser,
 		Challenge:        challenge.String(),
 		RPID:             rp.RPConfig.Origin,
 		UserID:           user.ID,
-		UserVerification: "preferred",
+		UserVerification: creationOptions.AuthenticatorSelection.UserVerification,
 	}
 
 	return creationOptions, session, nil
