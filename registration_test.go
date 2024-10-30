@@ -1,10 +1,13 @@
 package webauthn_test
 
 import (
+	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/mrtc0/go-webauthn"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestRelyingParty_CreateOptionsForRegistrationCelemony(t *testing.T) {
@@ -71,4 +74,103 @@ func TestRelyingParty_CreateOptionsForRegistrationCelemony(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestRelyingParty_CreateCredential(t *testing.T) {
+	t.Parallel()
+
+	rpConfig := &webauthn.RPConfig{
+		ID:              "example.com",
+		Name:            "Example",
+		Origin:          "https://example.com",
+		SubFrameOrigins: []string{},
+	}
+
+	user := &webauthn.WebAuthnUser{
+		ID:          []byte("123456789"),
+		Name:        "morita",
+		DisplayName: "Kohei Morita",
+	}
+
+	rp := webauthn.NewRelyingParty(rpConfig)
+	_, session, err := rp.CreateOptionsForRegistrationCeremony(user)
+	require.NoError(t, err)
+
+	testCases := map[string]struct {
+		user       *webauthn.WebAuthnUser
+		session    *webauthn.Session
+		credential *webauthn.RegistrationResponseJSON
+		err        error
+	}{
+		"NG: mismatch user": {
+			user: &webauthn.WebAuthnUser{
+				ID:          []byte("987654321"),
+				Name:        "morita",
+				DisplayName: "Kohei Morita",
+			},
+			session:    session,
+			credential: nil,
+			err:        fmt.Errorf("mismatch UserID"),
+		},
+		"NG: invalid credential response": {
+			user:    user,
+			session: session,
+			credential: &webauthn.RegistrationResponseJSON{
+				Response: webauthn.AuthenticatorAttestationResponseJSON{},
+			},
+			err: fmt.Errorf("failed to parse client data JSON"),
+		},
+		"NG: mismatch challenge": {
+			user:    user,
+			session: session,
+			credential: &webauthn.RegistrationResponseJSON{
+				ID: "123456789",
+				Response: webauthn.AuthenticatorAttestationResponseJSON{
+					ClientDataJSON: generateClientDataJSON(t, rpConfig.Origin, "invalid challenge"),
+				},
+			},
+			err: fmt.Errorf("challenge mismatch"),
+		},
+		"NG: mismatch origin": {
+			user:    user,
+			session: session,
+			credential: &webauthn.RegistrationResponseJSON{
+				ID: "123456789",
+				Response: webauthn.AuthenticatorAttestationResponseJSON{
+					ClientDataJSON: generateClientDataJSON(t, "https://invalid.com", session.Challenge),
+				},
+			},
+			err: fmt.Errorf("origin mismatch"),
+		},
+	}
+
+	for name, tc := range testCases {
+		tc := tc
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := rp.CreateCredential(tc.user, tc.session, tc.credential)
+			if tc.err != nil {
+				assert.ErrorContains(t, err, tc.err.Error())
+				return
+			}
+
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func generateClientDataJSON(t *testing.T, origin, challenge string) string {
+	t.Helper()
+
+	clientDataJson := &webauthn.CollectedClientData{
+		Type:      "webauthn.create",
+		Challenge: challenge,
+		Origin:    origin,
+	}
+
+	data, err := json.Marshal(clientDataJson)
+	require.NoError(t, err)
+
+	return webauthn.Base64URLEncodedByte(data).String()
 }
