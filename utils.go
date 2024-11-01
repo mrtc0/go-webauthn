@@ -25,3 +25,7 @@ func (b Base64URLEncodedByte) String() string {
 func SecureCompare(given string, actual string) bool {
 	return subtle.ConstantTimeCompare([]byte(given), []byte(actual)) == 1
 }
+
+func SecureCompareByte(given []byte, actual []byte) bool {
+	return subtle.ConstantTimeCompare(given, actual) == 1
+}

@@ -64,6 +64,68 @@ type RegistrationResponseJSON struct {
 	Type                    string                                    `json:"type"`
 }
 
+// https://www.w3.org/TR/webauthn-3/#dictdef-publickeycredentialrequestoptions
+type PublicKeyCredentialRequestOptions struct {
+	Challenge Base64URLEncodedByte `json:"challenge"`
+	Timeout   int64                `json:"timeout,omitempty"`
+
+	RPID               string                               `json:"rpId"`
+	AlloedCredentials  []PublicKeyCredentialDescriptor      `json:"allowCredentials,omitempty"`
+	UserVerification   string                               `json:"userVerification,omitempty"`
+	Hints              []string                             `json:"hints,omitempty"`
+	Attestation        string                               `json:"attestation,omitempty" default:"none"`
+	AttestationFormats []string                             `json:"attestationFormats,omitempty"`
+	Extensions         AuthenticationExtensionsClientInputs `json:"extensions,omitempty"`
+}
+
+type PublicKeyCredential struct {
+	ID                      string                                    `json:"id"`
+	RawID                   string                                    `json:"rawId"`
+	AuthenticatorAttachment string                                    `json:"authenticatorAttachment"`
+	ClientExtensionResults  AuthenticationExtensionsClientOutputsJSON `json:"clientExtensionResults"`
+	Type                    string                                    `json:"type"`
+}
+
+type AuthenticationResponseJSON struct {
+	PublicKeyCredential
+
+	Response AuthenticatorAssertionResponseJSON `json:"response"`
+}
+
+// https://www.w3.org/TR/webauthn-3/#authenticatorassertionresponse
+type AuthenticatorAssertionResponseJSON struct {
+	AuthenticatorResponseJSON
+
+	AuthenticatorData string `json:"authenticatorData"`
+	Signature         string `json:"signature"`
+	UserHandle        string `json:"userHandle"`
+	AttestationObject string `json:"attestationObject"`
+}
+
+type AuthenticatorAssertionResponse struct {
+	AuthenticatorResponse
+
+	AuthenticatorData Base64URLEncodedByte  `json:"authenticatorData"`
+	Signature         Base64URLEncodedByte  `json:"signature"`
+	UserHandle        *Base64URLEncodedByte `json:"userHandle"`
+	AttestationObject *Base64URLEncodedByte `json:"attestationObject"`
+}
+
+func (a AuthenticatorAssertionResponseJSON) ToInstance() (*AuthenticatorAssertionResponse, error) {
+	userHandle := Base64URLEncodedByte(a.UserHandle)
+	attestationObject := Base64URLEncodedByte(a.AttestationObject)
+
+	return &AuthenticatorAssertionResponse{
+		AuthenticatorResponse: AuthenticatorResponse{
+			ClientDataJSON: Base64URLEncodedByte(a.ClientDataJSON),
+		},
+		AuthenticatorData: Base64URLEncodedByte(a.AuthenticatorData),
+		Signature:         Base64URLEncodedByte(a.Signature),
+		UserHandle:        &userHandle,
+		AttestationObject: &attestationObject,
+	}, nil
+}
+
 // https://www.w3.org/TR/webauthn-3/#credential-record
 type CredentialRecord struct {
 	// Recommended
@@ -105,4 +167,8 @@ func ParseClientDataJSON(clientDataJSON Base64URLEncodedByte) (*CollectedClientD
 
 func (c *CollectedClientData) IsRegistrationCelemoney() bool {
 	return c.Type == "webauthn.create"
+}
+
+func (c *CollectedClientData) IsAuthenticationCeremony() bool {
+	return c.Type == "webauthn.get"
 }

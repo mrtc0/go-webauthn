@@ -5,4 +5,6 @@ type Session struct {
 	RPID             string
 	UserID           []byte
 	UserVerification string
+
+	AllowedCredentials []PublicKeyCredentialDescriptor
 }

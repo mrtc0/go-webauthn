@@ -60,6 +60,10 @@ type AuthenticatorResponse struct {
 	ClientDataJSON Base64URLEncodedByte `json:"clientDataJSON"`
 }
 
+type AuthenticatorResponseJSON struct {
+	ClientDataJSON string `json:"clientDataJSON"`
+}
+
 type AuthenticatorAttestationResponse struct {
 	AuthenticatorResponse
 
