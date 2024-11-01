@@ -1,7 +1,5 @@
 package webauthn
 
-import "encoding/json"
-
 // https://www.w3.org/TR/webauthn-3/#enum-credentialType
 const PublicKeyCredentialTypePublicKey = "public-key"
 
@@ -102,27 +100,56 @@ type AuthenticatorAssertionResponseJSON struct {
 	AttestationObject string `json:"attestationObject"`
 }
 
+type PublicKeyData interface {
+	Verify(data []byte, signature []byte) (bool, error)
+}
+
 type AuthenticatorAssertionResponse struct {
 	AuthenticatorResponse
 
-	AuthenticatorData Base64URLEncodedByte  `json:"authenticatorData"`
-	Signature         Base64URLEncodedByte  `json:"signature"`
-	UserHandle        *Base64URLEncodedByte `json:"userHandle"`
-	AttestationObject *Base64URLEncodedByte `json:"attestationObject"`
+	AuthenticatorData AuthenticatorData `json:"authenticatorData"`
+	Signature         []byte            `json:"signature"`
+	UserHandle        string            `json:"userHandle"`
+	AttestationObject []byte            `json:"attestationObject"`
 }
 
-func (a AuthenticatorAssertionResponseJSON) ToInstance() (*AuthenticatorAssertionResponse, error) {
-	userHandle := Base64URLEncodedByte(a.UserHandle)
-	attestationObject := Base64URLEncodedByte(a.AttestationObject)
+func (a AuthenticatorAssertionResponseJSON) Unmarshal() (*AuthenticatorAssertionResponse, error) {
+	rawAuthData, err := Base64URLEncodedByte(a.AuthenticatorData).Decode()
+	if err != nil {
+		return nil, err
+	}
+
+	authData := AuthenticatorData{}
+	if err := authData.Unmarshal(rawAuthData); err != nil {
+		return nil, err
+	}
+
+	userHandle, err := Base64URLEncodedByte(a.UserHandle).Decode()
+	if err != nil {
+		return nil, err
+	}
+
+	sig, err := Base64URLEncodedByte(a.Signature).Decode()
+	if err != nil {
+		return nil, err
+	}
+
+	attestationObject, err := Base64URLEncodedByte(a.AttestationObject).Decode()
+	if err != nil {
+		return nil, err
+	}
+
+	authenticatorResponse, err := a.AuthenticatorResponseJSON.Unmarshal()
+	if err != nil {
+		return nil, err
+	}
 
 	return &AuthenticatorAssertionResponse{
-		AuthenticatorResponse: AuthenticatorResponse{
-			ClientDataJSON: Base64URLEncodedByte(a.ClientDataJSON),
-		},
-		AuthenticatorData: Base64URLEncodedByte(a.AuthenticatorData),
-		Signature:         Base64URLEncodedByte(a.Signature),
-		UserHandle:        &userHandle,
-		AttestationObject: &attestationObject,
+		AuthenticatorResponse: *authenticatorResponse,
+		AuthenticatorData:     authData,
+		Signature:             sig,
+		UserHandle:            string(userHandle),
+		AttestationObject:     attestationObject,
 	}, nil
 }
 
@@ -140,35 +167,4 @@ type CredentialRecord struct {
 	// Optional
 	AttestationObject         []byte
 	AttestationClientDataJSON []byte
-}
-
-// https://www.w3.org/TR/webauthn-3/#client-data
-type CollectedClientData struct {
-	Type        string `json:"type"`
-	Challenge   string `json:"challenge"`
-	Origin      string `json:"origin"`
-	TopOrigin   string `json:"topOrigin,omitempty"`
-	CrossOrigin bool   `json:"crossOrigin,omitempty"`
-}
-
-func ParseClientDataJSON(clientDataJSON Base64URLEncodedByte) (*CollectedClientData, error) {
-	var c CollectedClientData
-
-	data, err := clientDataJSON.Decode()
-	if err != nil {
-		return nil, err
-	}
-
-	if err := json.Unmarshal(data, &c); err != nil {
-		return nil, err
-	}
-	return &c, nil
-}
-
-func (c *CollectedClientData) IsRegistrationCelemoney() bool {
-	return c.Type == "webauthn.create"
-}
-
-func (c *CollectedClientData) IsAuthenticationCeremony() bool {
-	return c.Type == "webauthn.get"
 }

@@ -2,6 +2,7 @@ package webauthn
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 
 	"github.com/fxamacker/cbor/v2"
@@ -46,6 +47,55 @@ func (a AuthenticatorFlags) HasBackupState() bool {
 	return (a & FlagBackupState) == FlagBackupState
 }
 
+// https://www.w3.org/TR/webauthn-3/#client-data
+type CollectedClientData struct {
+	Type        string `json:"type"`
+	Challenge   string `json:"challenge"`
+	Origin      string `json:"origin"`
+	TopOrigin   string `json:"topOrigin,omitempty"`
+	CrossOrigin bool   `json:"crossOrigin,omitempty"`
+}
+
+func (c *CollectedClientData) IsRegistrationCelemoney() bool {
+	return c.Type == "webauthn.create"
+}
+
+func (c *CollectedClientData) IsAuthenticationCeremony() bool {
+	return c.Type == "webauthn.get"
+}
+
+type AuthenticatorResponse struct {
+	ClientDataJSON []byte `json:"clientDataJSON"`
+
+	parsedClientDataJSON CollectedClientData
+}
+
+func (a AuthenticatorResponse) GetParsedClientDataJSON() CollectedClientData {
+	return a.parsedClientDataJSON
+}
+
+type AuthenticatorResponseJSON struct {
+	ClientDataJSON string `json:"clientDataJSON"`
+}
+
+func (a AuthenticatorResponseJSON) Unmarshal() (*AuthenticatorResponse, error) {
+	clientDataJSON, err := Base64URLEncodedByte(a.ClientDataJSON).Decode()
+	if err != nil {
+		return nil, err
+	}
+
+	var c CollectedClientData
+
+	if err := json.Unmarshal(clientDataJSON, &c); err != nil {
+		return nil, err
+	}
+
+	return &AuthenticatorResponse{
+		ClientDataJSON:       clientDataJSON,
+		parsedClientDataJSON: c,
+	}, nil
+}
+
 // https://www.w3.org/TR/webauthn-3/#dictdef-authenticatorattestationresponsejson
 type AuthenticatorAttestationResponseJSON struct {
 	ClientDataJSON     string   `json:"clientDataJSON"`
@@ -56,51 +106,56 @@ type AuthenticatorAttestationResponseJSON struct {
 	AttestationObject  string   `json:"attestationObject"`
 }
 
-type AuthenticatorResponse struct {
-	ClientDataJSON Base64URLEncodedByte `json:"clientDataJSON"`
-}
-
-type AuthenticatorResponseJSON struct {
-	ClientDataJSON string `json:"clientDataJSON"`
-}
-
 type AuthenticatorAttestationResponse struct {
 	AuthenticatorResponse
 
-	AttestationObject Base64URLEncodedByte `json:"attestationObject"`
+	AttestationObject AttestationObject
 
-	authenticatorData  string
+	rawAttestationObject []byte
+
+	authenticatorData  AuthenticatorData
 	transports         []string
 	publicKey          string
 	publicKeyAlgorithm int64
 }
 
-func (a *AuthenticatorAttestationResponse) GetTransports() []string {
-	return a.transports
-}
+func (a AuthenticatorAttestationResponseJSON) Unmarshal() (*AuthenticatorAttestationResponse, error) {
+	rawAuthData, err := Base64URLEncodedByte(a.AuthenticatorData).Decode()
+	if err != nil {
+		return nil, err
+	}
 
-func (a *AuthenticatorAttestationResponse) GetPublicKey() string {
-	return a.publicKey
-}
+	authData := AuthenticatorData{}
+	if err := authData.Unmarshal(rawAuthData); err != nil {
+		return nil, err
+	}
 
-func (a *AuthenticatorAttestationResponse) GetPublicKeyAlgorithm() int64 {
-	return a.publicKeyAlgorithm
-}
+	authenticatorResponseJson := AuthenticatorResponseJSON{
+		ClientDataJSON: a.ClientDataJSON,
+	}
+	authenticatorResponse, err := authenticatorResponseJson.Unmarshal()
+	if err != nil {
+		return nil, err
+	}
 
-func (a *AuthenticatorAttestationResponse) GetAuthenticatorData() string {
-	return a.authenticatorData
-}
+	rawAttestationObject, err := Base64URLEncodedByte(a.AttestationObject).Decode()
+	if err != nil {
+		return nil, err
+	}
 
-func (a AuthenticatorAttestationResponseJSON) ToInstance() (*AuthenticatorAttestationResponse, error) {
+	attestationObject := AttestationObject{}
+	if err := cbor.Unmarshal(rawAttestationObject, &attestationObject); err != nil {
+		return nil, err
+	}
+
 	return &AuthenticatorAttestationResponse{
-		AuthenticatorResponse: AuthenticatorResponse{
-			ClientDataJSON: Base64URLEncodedByte(a.ClientDataJSON),
-		},
-		AttestationObject:  Base64URLEncodedByte(a.AttestationObject),
-		authenticatorData:  a.AuthenticatorData,
-		transports:         a.Transports,
-		publicKey:          a.PublicKey,
-		publicKeyAlgorithm: a.PublicKeyAlgorithm,
+		AuthenticatorResponse: *authenticatorResponse,
+		AttestationObject:     attestationObject,
+		rawAttestationObject:  rawAttestationObject,
+		authenticatorData:     authData,
+		transports:            a.Transports,
+		publicKey:             a.PublicKey,
+		publicKeyAlgorithm:    a.PublicKeyAlgorithm,
 	}, nil
 }
 
@@ -117,7 +172,7 @@ const (
 	AuthenticatorDataMinSize = 37
 )
 
-func (a *AuthenticatorData) Unmarshal(data []byte) error {
+func (a AuthenticatorData) Unmarshal(data []byte) error {
 	if len(data) < AuthenticatorDataMinSize {
 		return errors.New("authenticator data is too short, expected at least 37 bytes")
 	}

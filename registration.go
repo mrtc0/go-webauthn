@@ -5,8 +5,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"time"
-
-	"github.com/fxamacker/cbor/v2"
 )
 
 type RPConfig struct {
@@ -87,7 +85,7 @@ func (rp *RelyingParty) CreateCredential(user *WebAuthnUser, session *Session, c
 	// Step 3. Let response be credential.response.
 	// If response is not an instance of AuthenticatorAttestationResponse,
 	// abort the ceremony with a user-visible error.
-	authenticatorAttestationResponse, err := credential.Response.ToInstance()
+	authenticatorAttestationResponse, err := credential.Response.Unmarshal()
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
@@ -98,10 +96,7 @@ func (rp *RelyingParty) CreateCredential(user *WebAuthnUser, session *Session, c
 	// Step 5. Let JSONtext be the result of running UTF-8 decode on the value of response.clientDataJSON.
 	// Step 6. Let C, the client data claimed as collected during the credential creation,
 	// be the result of running an implementation-specific JSON parser on JSONtext.
-	c, err := ParseClientDataJSON(authenticatorAttestationResponse.ClientDataJSON)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse client data JSON: %w", err)
-	}
+	c := authenticatorAttestationResponse.GetParsedClientDataJSON()
 
 	// Step 7. Verify that the value of C.type is webauthn.create.
 	if !c.IsRegistrationCelemoney() {
@@ -155,16 +150,7 @@ func (rp *RelyingParty) CreateCredential(user *WebAuthnUser, session *Session, c
 	hash := sum[:]
 
 	// Step 12. Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure to obtain the attestation statement format fmt, the authenticator data authData, and the attestation statement attStmt.
-	attestationObjectData, err := authenticatorAttestationResponse.AttestationObject.Decode()
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode attestation object: %w", err)
-	}
-
-	var attestationObject AttestationObject
-	if err := cbor.Unmarshal(attestationObjectData, &attestationObject); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal attestation object: %w", err)
-	}
-
+	attestationObject := authenticatorAttestationResponse.AttestationObject
 	authenticatorData := &AuthenticatorData{}
 	if err := authenticatorData.Unmarshal(attestationObject.AuthData); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal authenticator data: %w", err)
@@ -248,10 +234,10 @@ func (rp *RelyingParty) CreateCredential(user *WebAuthnUser, session *Session, c
 		PublicKey:                 authenticatorData.AttestedCredentialData.CredentialPublicKey,
 		SignCount:                 authenticatorData.SignCount,
 		UvInitialized:             authenticatorData.Flags.HasUserVerified(),
-		Transports:                []string{}, // TODO
+		Transports:                authenticatorAttestationResponse.transports,
 		BackupEligible:            authenticatorData.Flags.HasBackupEligible(),
 		BackupState:               authenticatorData.Flags.HasBackupState(),
-		AttestationObject:         authenticatorAttestationResponse.AttestationObject,
+		AttestationObject:         authenticatorAttestationResponse.rawAttestationObject,
 		AttestationClientDataJSON: authenticatorAttestationResponse.ClientDataJSON,
 	}, nil
 }
