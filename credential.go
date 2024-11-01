@@ -1,5 +1,7 @@
 package webauthn
 
+import "github.com/fxamacker/cbor/v2"
+
 // https://www.w3.org/TR/webauthn-3/#enum-credentialType
 const PublicKeyCredentialTypePublicKey = "public-key"
 
@@ -167,4 +169,39 @@ type CredentialRecord struct {
 	// Optional
 	AttestationObject         []byte
 	AttestationClientDataJSON []byte
+}
+
+type publicKeyData struct {
+	_         bool  `cbor:",keyasint" json:"public_key"`
+	KeyType   int64 `cbor:"1,keyasint" json:"kty"` // required
+	Algorithm int64 `cbor:"3,keyasint" json:"alg"` // required
+}
+
+// The credential public key encoded in COSE_Key format, using the CTAP2 canonical CBOR encoding form.
+func (r *CredentialRecord) GetPublicKey() (*PublicKeyData, error) {
+	pk := &publicKeyData{}
+
+	// ref. https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#ctap2-canonical-cbor-encoding-form
+	mode, err := cbor.DecOptions{
+		// If map keys are present that an implementation does not understand, they MUST be ignored.
+		DupMapKey: cbor.DupMapKeyEnforcedAPF, // don't allow duplicate map keys
+		// Indefinite-length items must be made into definite-length items.
+		IndefLength: cbor.IndefLengthForbidden,
+		// Because some authenticators are memory constrained, the depth of nested CBOR structures
+		// used by all message encodings is limited to at most four (4) levels of any combination of
+		// CBOR maps and/or CBOR arrays.
+		MaxNestedLevels: 4,
+		// Tags as defined in Section 2.4 in [RFC7049] MUST NOT be present.
+		TagsMd: cbor.TagsForbidden,
+	}.DecMode()
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = mode.UnmarshalFirst(r.PublicKey, &pk)
+
+	switch pk.KeyType {
+	}
+
+	return pk, err
 }
