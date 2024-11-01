@@ -1,6 +1,10 @@
 package webauthn
 
-import "github.com/fxamacker/cbor/v2"
+import (
+	"fmt"
+
+	"github.com/fxamacker/cbor/v2"
+)
 
 // https://www.w3.org/TR/webauthn-3/#enum-credentialType
 const PublicKeyCredentialTypePublicKey = "public-key"
@@ -102,10 +106,6 @@ type AuthenticatorAssertionResponseJSON struct {
 	AttestationObject string `json:"attestationObject"`
 }
 
-type PublicKeyData interface {
-	Verify(data []byte, signature []byte) (bool, error)
-}
-
 type AuthenticatorAssertionResponse struct {
 	AuthenticatorResponse
 
@@ -113,6 +113,8 @@ type AuthenticatorAssertionResponse struct {
 	Signature         []byte            `json:"signature"`
 	UserHandle        string            `json:"userHandle"`
 	AttestationObject []byte            `json:"attestationObject"`
+
+	rawAuthData []byte
 }
 
 func (a AuthenticatorAssertionResponseJSON) Unmarshal() (*AuthenticatorAssertionResponse, error) {
@@ -152,6 +154,7 @@ func (a AuthenticatorAssertionResponseJSON) Unmarshal() (*AuthenticatorAssertion
 		Signature:             sig,
 		UserHandle:            string(userHandle),
 		AttestationObject:     attestationObject,
+		rawAuthData:           rawAuthData,
 	}, nil
 }
 
@@ -171,14 +174,55 @@ type CredentialRecord struct {
 	AttestationClientDataJSON []byte
 }
 
+type PublicKeyData interface {
+	Verify(data []byte, signature []byte) (bool, error)
+}
+
 type publicKeyData struct {
 	_         bool  `cbor:",keyasint" json:"public_key"`
 	KeyType   int64 `cbor:"1,keyasint" json:"kty"` // required
 	Algorithm int64 `cbor:"3,keyasint" json:"alg"` // required
 }
 
+type OKPPublicKeyData struct {
+	PublicKeyData *publicKeyData
+}
+
+type EC2PublicKeyData struct {
+	PublicKeyData *publicKeyData
+}
+
+type RSAPublicKeyData struct {
+	PublicKeyData *publicKeyData
+}
+
+func (p *OKPPublicKeyData) Verify(data []byte, signature []byte) (bool, error) {
+	return false, nil
+}
+
+func (p *EC2PublicKeyData) Verify(data []byte, signature []byte) (bool, error) {
+	return false, nil
+}
+
+func (p *RSAPublicKeyData) Verify(data []byte, signature []byte) (bool, error) {
+	return false, nil
+}
+
+type COSEKeyType int
+
+// https://www.iana.org/assignments/cose/cose.xhtml#key-type
+const (
+	COSEKeyTypeReserved COSEKeyType = iota
+	COSEKeyTypeOKP
+	COSEKeyTypeEC2
+	COSEKeyTypeRSA
+	COSEKeyTypeSymmetric
+	COSEKeyTypeHSS_LMS
+	COSEKeyTypeWalnutDSA
+)
+
 // The credential public key encoded in COSE_Key format, using the CTAP2 canonical CBOR encoding form.
-func (r *CredentialRecord) GetPublicKey() (*PublicKeyData, error) {
+func (r *CredentialRecord) GetPublicKey() (PublicKeyData, error) {
 	pk := &publicKeyData{}
 
 	// ref. https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#ctap2-canonical-cbor-encoding-form
@@ -200,8 +244,14 @@ func (r *CredentialRecord) GetPublicKey() (*PublicKeyData, error) {
 
 	_, err = mode.UnmarshalFirst(r.PublicKey, &pk)
 
-	switch pk.KeyType {
+	switch COSEKeyType(pk.KeyType) {
+	case COSEKeyTypeOKP:
+		return &OKPPublicKeyData{PublicKeyData: pk}, nil
+	case COSEKeyTypeEC2:
+		return &EC2PublicKeyData{PublicKeyData: pk}, nil
+	case COSEKeyTypeRSA:
+		return &RSAPublicKeyData{PublicKeyData: pk}, nil
+	default:
+		return nil, fmt.Errorf("unsupported key type: %d", pk.KeyType)
 	}
-
-	return pk, err
 }

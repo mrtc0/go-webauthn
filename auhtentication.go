@@ -51,13 +51,13 @@ func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(user *WebAuthnUse
 	return credentialRequestOptions, session, nil
 }
 
-type DiscoveryUserHandler func(credentialRawID []byte, userHandle []byte) (*WebAuthnUser, *CredentialRecord, error)
+type DiscoveryUserHandler func(credentialRawID []byte, userHandle string) (*WebAuthnUser, *CredentialRecord, error)
 
 func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Session, credential *AuthenticationResponseJSON) (*WebAuthnUser, *CredentialRecord, error) {
 	// Step 3. Let response be credential.response.
 	// If response is not an instance of AuthenticatorAssertionResponse,
 	// abort the ceremony with a user-visible error.
-	authenticatorAssertionResponse, err := credential.Response.ToInstance()
+	authenticatorAssertionResponse, err := credential.Response.Unmarshal()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -91,33 +91,22 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 	// verify that response.userHandle is present. Verify that the user account identified
 	// by response.userHandle contains a credential record whose id equals credential.rawId.
 	// Let credentialRecord be that credential record.
-	if authenticatorAssertionResponse.UserHandle != nil {
+	if authenticatorAssertionResponse.UserHandle == "" {
 		return nil, nil, fmt.Errorf("user handle is not present")
 	}
 
-	user, credentialRecord, err := handler([]byte(credential.RawID), *authenticatorAssertionResponse.UserHandle)
+	user, credentialRecord, err := handler([]byte(credential.RawID), authenticatorAssertionResponse.UserHandle)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// Step 7. Let cData, authData and sig denote the value of response’s clientDataJSON,
 	// authenticatorData, and signature respectively.
-	c, err := ParseClientDataJSON(authenticatorAssertionResponse.ClientDataJSON)
-	if err != nil {
-		return nil, nil, err
-	}
+	c := authenticatorAssertionResponse.GetParsedClientDataJSON()
 
-	var authData AuthenticatorData
-	rawAuthData, err := authenticatorAssertionResponse.AuthenticatorData.Decode()
-	if err != nil {
-		return nil, nil, err
-	}
+	rawAuthData := authenticatorAssertionResponse.rawAuthData
 
-	if err := authData.Unmarshal(rawAuthData); err != nil {
-		return nil, nil, err
-	}
-
-	sig, err := authenticatorAssertionResponse.Signature.Decode()
+	sig := authenticatorAssertionResponse.Signature
 	if err != nil {
 		return nil, nil, err
 	}
@@ -161,34 +150,34 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 
 	// Step 14. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
 	rpIDHash := sha256.Sum256([]byte(rp.RPConfig.ID))
-	if !bytes.Equal(authData.RPIDHash, rpIDHash[:]) {
+	if !bytes.Equal(authenticatorAssertionResponse.AuthenticatorData.RPIDHash, rpIDHash[:]) {
 		return nil, nil, fmt.Errorf("rpIdHash mismatch")
 	}
 
 	// Step 15. Verify that the UP bit of the flags in authData is set.
-	if !authData.Flags.HasUserPresent() {
+	if !authenticatorAssertionResponse.AuthenticatorData.Flags.HasUserPresent() {
 		return nil, nil, fmt.Errorf("user not present")
 	}
 
 	// Step 16. Determine whether user verification is required for this assertion.
 	// User verification SHOULD be required if, and only if, options.userVerification is set to required.
-	if session.UserVerification == "required" && !authData.Flags.HasUserVerified() {
+	if session.UserVerification == "required" && !authenticatorAssertionResponse.AuthenticatorData.Flags.HasUserVerified() {
 		return nil, nil, fmt.Errorf("user verification required")
 	}
 
 	// Step 17. If the BE bit of the flags in authData is not set, verify that the BS bit is not set.
-	if !authData.Flags.HasBackupEligible() && authData.Flags.HasBackupState() {
+	if !authenticatorAssertionResponse.AuthenticatorData.Flags.HasBackupEligible() && authenticatorAssertionResponse.AuthenticatorData.Flags.HasBackupState() {
 		return nil, nil, fmt.Errorf("BE bit is not set, but BS bit is set")
 	}
 
 	// Step 18. If the credential backup state is used as part of Relying Party business logic or policy,
 	// let currentBe and currentBs be the values of the BE and BS bits, respectively, of the flags in authData.
 	// Compare currentBe and currentBs with credentialRecord.backupEligible and credentialRecord.backupState:
-	if credentialRecord.BackupEligible && !authData.Flags.HasBackupEligible() {
+	if credentialRecord.BackupEligible && !authenticatorAssertionResponse.AuthenticatorData.Flags.HasBackupEligible() {
 		return nil, nil, fmt.Errorf("backup eligible but BE bit is not set")
 	}
 
-	if !credentialRecord.BackupEligible && authData.Flags.HasBackupEligible() {
+	if !credentialRecord.BackupEligible && authenticatorAssertionResponse.AuthenticatorData.Flags.HasBackupEligible() {
 		return nil, nil, fmt.Errorf("not backup eligible but BE bit is set")
 	}
 
@@ -197,15 +186,20 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 	// TODO: Step 19.
 
 	// Step 20. Let hash be the result of computing a hash over the cData using SHA-256.
-	cData, err := authenticatorAssertionResponse.ClientDataJSON.Decode()
-	if err != nil {
-		return nil, nil, err
-	}
-
+	cData := authenticatorAssertionResponse.ClientDataJSON
 	sum := sha256.Sum256(cData)
 	hash := sum[:]
 
 	// Step 21. Using credentialRecord.publicKey, verify that sig is a valid signature over the
 	// binary concatenation of authData and hash.
+	publicKey, err := credentialRecord.GetPublicKey()
+	if err != nil {
+		return nil, nil, err
+	}
 
+	sigData := append(rawAuthData, hash...)
+	valid, err := publicKey.Verify(sigData, sig)
+	if err != nil {
+		return nil, nil, err
+	}
 }
