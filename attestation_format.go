@@ -2,8 +2,6 @@ package webauthn
 
 import (
 	"fmt"
-
-	"github.com/fxamacker/cbor/v2"
 )
 
 // https://www.iana.org/assignments/webauthn/webauthn.xhtml
@@ -83,7 +81,9 @@ func (n *NoneAttestationStatementVerifier) Verify() (attestationType string, x50
 	return "None", []string{}, nil
 }
 
-func DetermineAttestaionStatement(format string, attStmt cbor.RawMessage, authData, hash []byte) (AttestationStatementVerifier, error) {
+func DetermineAttestaionStatement(format string, attStmt map[string]any, authData, hash []byte) (AttestationStatementVerifier, error) {
+	// passkeys always uses the "none" attestation format
+	// ref. https://forums.developer.apple.com/forums/thread/742434
 	switch AttestationFormat(format) {
 	case AttestationFormatPacked:
 		return &PackedAttestationStatementVerifier{}, nil

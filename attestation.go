@@ -15,9 +15,9 @@ type AttestedCredentialData struct {
 }
 
 type AttestationObject struct {
-	AuthData     []byte          `cbor:"authData"`
-	Format       string          `cbor:"fmt"`
-	AttStatement cbor.RawMessage `cbor:"attStmt"`
+	AuthData     []byte         `cbor:"authData"`
+	Format       string         `cbor:"fmt"`
+	AttStatement map[string]any `cbor:"attStmt"`
 }
 
 type coseKey struct {
