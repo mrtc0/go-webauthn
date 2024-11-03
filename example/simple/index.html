@@ -4,16 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
-    <script src="https://unpkg.com/@simplewebauthn/browser/dist/bundle/index.umd.min.js" integrity="sha384-SijkeUvZZs1bto8G/GPfjLDAg4FRZB5yGFAdMT5T7n3bMnkfFMEhE/h11ClJPNFR" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@simplewebauthn/browser@11.0.0/dist/bundle/index.umd.min.js" integrity="sha384-MEoU+35r/Mcpi7hzGCSKXkm+Yu7nRyDqV8z+GjTNBhxzV/JrQXe88JTG1ol0+F1e" crossorigin="anonymous"></script>
 </head>
 <body>
    <script>
         const registration = async () => {
             const data = await fetch('/webauthn/registration/start');
-            const json = await data.json();
-            console.log(json)
+            const optionsJSON = await data.json();
+            console.log(optionsJSON)
 
-            const attResp = await SimpleWebAuthnBrowser.startRegistration(json)
+            const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON })
             console.log(attResp)
 
             const verificationResp = await fetch('/webauthn/registration/finish', {
@@ -28,7 +28,26 @@
             console.log(verificationJSON)
         }
 
-        registration();
+        const login = async () => {
+            const data = await fetch('/webauthn/login/start');
+            const optionsJSON = await data.json();
+
+            console.log(optionsJSON)
+
+            const asseResp = await SimpleWebAuthnBrowser.startAuthentication({ optionsJSON })
+            console.log(asseResp)
+
+            const verificationResp = await fetch('/webauthn/login/finish', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(asseResp)
+            })
+        }
    </script> 
+
+   <input type="button" value="Register" onclick="registration()">
+   <input type="button" value="Login" onclick="login()">
 </body>
 </html>
