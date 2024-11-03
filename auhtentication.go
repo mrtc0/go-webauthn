@@ -8,32 +8,18 @@ import (
 
 type AuthenticationCeremonyOption func(*PublicKeyCredentialRequestOptions)
 
-func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(user *WebAuthnUser, opts ...AuthenticationCeremonyOption) (*PublicKeyCredentialRequestOptions, *Session, error) {
-	if len(user.Credentials) == 0 {
-		return nil, nil, fmt.Errorf("no credentials for user")
-	}
-
-	var allowedCredentials = make([]PublicKeyCredentialDescriptor, len(user.Credentials))
-	for i, credential := range user.Credentials {
-		allowedCredentials[i] = PublicKeyCredentialDescriptor{
-			Type:       "public-key",
-			ID:         credential.ID,
-			Transports: []string{}, // TODO
-		}
-	}
-
+func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(sessionID []byte, opts ...AuthenticationCeremonyOption) (*PublicKeyCredentialRequestOptions, *Session, error) {
 	challenge, err := GenerateChallenge()
 	if err != nil {
 		return nil, nil, err
 	}
 
 	credentialRequestOptions := &PublicKeyCredentialRequestOptions{
-		Challenge:         challenge,
-		RPID:              rp.RPConfig.ID,
-		UserVerification:  "preferred",
-		AlloedCredentials: allowedCredentials,
-		Timeout:           defaultTimeout,
-		Attestation:       "none",
+		Challenge:        challenge,
+		RPID:             rp.RPConfig.ID,
+		UserVerification: "preferred",
+		Timeout:          defaultTimeout,
+		Attestation:      "none",
 	}
 
 	for _, opt := range opts {
@@ -41,11 +27,10 @@ func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(user *WebAuthnUse
 	}
 
 	session := &Session{
-		Challenge:          challenge.String(),
-		RPID:               rp.RPConfig.Origin,
-		UserID:             user.ID,
-		UserVerification:   credentialRequestOptions.UserVerification,
-		AllowedCredentials: allowedCredentials,
+		Challenge:        challenge.String(),
+		RPID:             rp.RPConfig.Origin,
+		UserID:           sessionID,
+		UserVerification: credentialRequestOptions.UserVerification,
 	}
 
 	return credentialRequestOptions, session, nil
@@ -67,9 +52,10 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 	// Step 5. If options.allowCredentials is not empty,
 	// verify that credential.id identifies one of the public key credentials listed in
 	// options.allowCredentials.
-	if session.AllowedCredentials != nil || len(session.AllowedCredentials) > 0 {
+	if len(session.AllowedCredentials) > 0 {
 		found := false
 		for _, allowedCredential := range session.AllowedCredentials {
+			fmt.Println(allowedCredential.ID, []byte(credential.ID))
 			if SecureCompareByte(allowedCredential.ID, []byte(credential.ID)) {
 				found = true
 				break
@@ -107,9 +93,6 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 	rawAuthData := authenticatorAssertionResponse.rawAuthData
 
 	sig := authenticatorAssertionResponse.Signature
-	if err != nil {
-		return nil, nil, err
-	}
 
 	// Step 10. Verify that the value of C.type is the string webauthn.get.
 	if !c.IsAuthenticationCeremony() {
@@ -187,7 +170,7 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 
 	// Step 20. Let hash be the result of computing a hash over the cData using SHA-256.
 	cData := authenticatorAssertionResponse.ClientDataJSON
-	sum := sha256.Sum256(cData)
+	sum := sha256.Sum256([]byte(cData))
 	hash := sum[:]
 
 	// Step 21. Using credentialRecord.publicKey, verify that sig is a valid signature over the
@@ -202,4 +185,6 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 	if err != nil {
 		return nil, nil, err
 	}
+	fmt.Println(user, valid)
+	return user, credentialRecord, nil
 }

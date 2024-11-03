@@ -172,7 +172,7 @@ const (
 	AuthenticatorDataMinSize = 37
 )
 
-func (a AuthenticatorData) Unmarshal(data []byte) error {
+func (a *AuthenticatorData) Unmarshal(data []byte) error {
 	if len(data) < AuthenticatorDataMinSize {
 		return errors.New("authenticator data is too short, expected at least 37 bytes")
 	}
