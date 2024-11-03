@@ -104,19 +104,19 @@ type AuthenticationResponseJSON struct {
 type AuthenticatorAssertionResponseJSON struct {
 	AuthenticatorResponseJSON
 
-	AuthenticatorData string `json:"authenticatorData"`
-	Signature         string `json:"signature"`
-	UserHandle        string `json:"userHandle"`
-	AttestationObject string `json:"attestationObject"`
+	AuthenticatorData string  `json:"authenticatorData"`
+	Signature         string  `json:"signature"`
+	UserHandle        string  `json:"userHandle"`
+	AttestationObject *string `json:"attestationObject"`
 }
 
 type AuthenticatorAssertionResponse struct {
 	AuthenticatorResponse
 
-	AuthenticatorData AuthenticatorData `json:"authenticatorData"`
-	Signature         []byte            `json:"signature"`
-	UserHandle        string            `json:"userHandle"`
-	AttestationObject AttestationObject `json:"attestationObject"`
+	AuthenticatorData *AuthenticatorData `json:"authenticatorData"`
+	Signature         []byte             `json:"signature"`
+	UserHandle        string             `json:"userHandle"`
+	AttestationObject *AttestationObject `json:"attestationObject"`
 
 	rawAuthData          []byte
 	rawAttestationObject []byte
@@ -128,7 +128,7 @@ func (a AuthenticatorAssertionResponseJSON) Unmarshal() (*AuthenticatorAssertion
 		return nil, err
 	}
 
-	authData := AuthenticatorData{}
+	authData := &AuthenticatorData{}
 	if err := authData.Unmarshal(rawAuthData); err != nil {
 		return nil, err
 	}
@@ -143,13 +143,17 @@ func (a AuthenticatorAssertionResponseJSON) Unmarshal() (*AuthenticatorAssertion
 		return nil, err
 	}
 
-	rawAttestationObject, err := Base64URLEncodedByte(a.AttestationObject).Decode()
-	if err != nil {
-		return nil, err
-	}
-	attestationObject := AttestationObject{}
-	if err := cbor.Unmarshal(rawAttestationObject, &attestationObject); err != nil {
-		return nil, err
+	var rawAttestationObject []byte
+	var attestationObject *AttestationObject
+	if a.AttestationObject != nil {
+		rawAttestationObject, err = Base64URLEncodedByte(*a.AttestationObject).Decode()
+		if err != nil {
+			return nil, err
+		}
+
+		if err := cbor.Unmarshal(rawAttestationObject, &attestationObject); err != nil {
+			return nil, err
+		}
 	}
 
 	authenticatorResponse, err := a.AuthenticatorResponseJSON.Unmarshal()

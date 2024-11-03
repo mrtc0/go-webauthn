@@ -44,7 +44,7 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 	// abort the ceremony with a user-visible error.
 	authenticatorAssertionResponse, err := credential.Response.Unmarshal()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	// TODO: Step 4. Let clientExtensionResults be the result of calling credential.getClientExtensionResults().
@@ -83,7 +83,7 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 
 	user, credentialRecord, err := handler([]byte(credential.RawID), authenticatorAssertionResponse.UserHandle)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
 	// Step 7. Let cData, authData and sig denote the value of response’s clientDataJSON,
@@ -177,13 +177,13 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 	// binary concatenation of authData and hash.
 	publicKey, err := credentialRecord.GetPublicKey()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to get public key: %w", err)
 	}
 
 	sigData := append(rawAuthData, hash...)
 	valid, err := publicKey.Verify(sigData, sig)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to verify signature: %w", err)
 	}
 
 	if !valid {
@@ -205,33 +205,35 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 	// then perform CBOR decoding on attestationObject to obtain the attestation statement format fmt,
 	// and the attestation statement attStmt.
 
-	if !authenticatorAssertionResponse.AuthenticatorData.Flags.HasAttestedCredentialData() {
-		return nil, nil, fmt.Errorf("attested credential data is not present")
-	}
+	if authenticatorAssertionResponse.AttestationObject != nil {
+		if !authenticatorAssertionResponse.AuthenticatorData.Flags.HasAttestedCredentialData() {
+			return nil, nil, fmt.Errorf("attested credential data is not present")
+		}
 
-	authenticatorData := &AuthenticatorData{}
-	if err := authenticatorData.Unmarshal(authenticatorAssertionResponse.AttestationObject.AuthData); err != nil {
-		return nil, nil, err
-	}
+		authenticatorData := &AuthenticatorData{}
+		if err := authenticatorData.Unmarshal(authenticatorAssertionResponse.AttestationObject.AuthData); err != nil {
+			return nil, nil, fmt.Errorf("failed to unmarshal authenticator data: %w", err)
+		}
 
-	credentialID := authenticatorData.AttestedCredentialData.CredentialID
-	credentialPublicKey := authenticatorData.AttestedCredentialData.CredentialPublicKey
-	if bytes.Equal(credentialID, credentialRecord.ID) || bytes.Equal(credentialPublicKey, credentialRecord.PublicKey) {
-		return nil, nil, fmt.Errorf("credential mismatch")
-	}
+		credentialID := authenticatorData.AttestedCredentialData.CredentialID
+		credentialPublicKey := authenticatorData.AttestedCredentialData.CredentialPublicKey
+		if bytes.Equal(credentialID, credentialRecord.ID) || bytes.Equal(credentialPublicKey, credentialRecord.PublicKey) {
+			return nil, nil, fmt.Errorf("credential mismatch")
+		}
 
-	verifier, err := DetermineAttestaionStatement(
-		authenticatorAssertionResponse.AttestationObject.Format,
-		authenticatorAssertionResponse.AttestationObject.AttStatement,
-		authenticatorAssertionResponse.rawAuthData,
-		hash)
-	if err != nil {
-		return nil, nil, err
-	}
+		verifier, err := DetermineAttestaionStatement(
+			authenticatorAssertionResponse.AttestationObject.Format,
+			authenticatorAssertionResponse.AttestationObject.AttStatement,
+			authenticatorAssertionResponse.rawAuthData,
+			hash)
+		if err != nil {
+			return nil, nil, err
+		}
 
-	_, _, err = verifier.Verify()
-	if err != nil {
-		return nil, nil, err
+		_, _, err = verifier.Verify()
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	// Step 24. Update credentialRecord with new state values:
