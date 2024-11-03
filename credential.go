@@ -116,9 +116,10 @@ type AuthenticatorAssertionResponse struct {
 	AuthenticatorData AuthenticatorData `json:"authenticatorData"`
 	Signature         []byte            `json:"signature"`
 	UserHandle        string            `json:"userHandle"`
-	AttestationObject []byte            `json:"attestationObject"`
+	AttestationObject AttestationObject `json:"attestationObject"`
 
-	rawAuthData []byte
+	rawAuthData          []byte
+	rawAttestationObject []byte
 }
 
 func (a AuthenticatorAssertionResponseJSON) Unmarshal() (*AuthenticatorAssertionResponse, error) {
@@ -142,8 +143,12 @@ func (a AuthenticatorAssertionResponseJSON) Unmarshal() (*AuthenticatorAssertion
 		return nil, err
 	}
 
-	attestationObject, err := Base64URLEncodedByte(a.AttestationObject).Decode()
+	rawAttestationObject, err := Base64URLEncodedByte(a.AttestationObject).Decode()
 	if err != nil {
+		return nil, err
+	}
+	attestationObject := AttestationObject{}
+	if err := cbor.Unmarshal(rawAttestationObject, &attestationObject); err != nil {
 		return nil, err
 	}
 
@@ -159,6 +164,7 @@ func (a AuthenticatorAssertionResponseJSON) Unmarshal() (*AuthenticatorAssertion
 		UserHandle:            string(userHandle),
 		AttestationObject:     attestationObject,
 		rawAuthData:           rawAuthData,
+		rawAttestationObject:  rawAttestationObject,
 	}, nil
 }
 
