@@ -137,7 +137,7 @@ func TestRelyingParty_CreateCredential(t *testing.T) {
 			credential: &webauthn.RegistrationResponseJSON{
 				ID: "123456789",
 				Response: webauthn.AuthenticatorAttestationResponseJSON{
-					ClientDataJSON: generateClientDataJSON(t, "https://invalid.com", session.Challenge),
+					ClientDataJSON: generateClientDataJSON(t, "https://invalid.com", string(session.Challenge)),
 				},
 			},
 			err: fmt.Errorf("origin mismatch"),
@@ -149,7 +149,7 @@ func TestRelyingParty_CreateCredential(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := rp.CreateCredential(tc.user, tc.session, tc.credential)
+			_, err := rp.CreateCredential(tc.session, tc.credential)
 			if tc.err != nil {
 				assert.ErrorContains(t, err, tc.err.Error())
 				return

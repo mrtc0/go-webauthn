@@ -55,7 +55,7 @@ func (rp *RelyingParty) CreateOptionsForRegistrationCeremony(user *WebAuthnUser,
 	creationOptions := &PublicKeyCredentialCreationOptions{
 		RP:                     *publicKeyCredentialRPEntity,
 		User:                   *userEntity,
-		Challenge:              challenge,
+		Challenge:              Base64URLEncodedByte(challenge),
 		PubKeyCredParams:       defaultCredentialParameters(),
 		Timeout:                defaultTimeout,
 		ExcludeCredentials:     []PublicKeyCredentialDescriptor{},
@@ -68,20 +68,16 @@ func (rp *RelyingParty) CreateOptionsForRegistrationCeremony(user *WebAuthnUser,
 	}
 
 	session := &Session{
-		Challenge:        challenge.String(),
+		ID:               user.ID,
+		Challenge:        challenge,
 		RPID:             rp.RPConfig.Origin,
-		UserID:           user.ID,
 		UserVerification: creationOptions.AuthenticatorSelection.UserVerification,
 	}
 
 	return creationOptions, session, nil
 }
 
-func (rp *RelyingParty) CreateCredential(user *WebAuthnUser, session *Session, credential *RegistrationResponseJSON) (*CredentialRecord, error) {
-	if err := rp.VerifyUserID(user, session); err != nil {
-		return nil, err
-	}
-
+func (rp *RelyingParty) CreateCredential(session *Session, credential *RegistrationResponseJSON) (*CredentialRecord, error) {
 	// Step 3. Let response be credential.response.
 	// If response is not an instance of AuthenticatorAttestationResponse,
 	// abort the ceremony with a user-visible error.
@@ -104,7 +100,12 @@ func (rp *RelyingParty) CreateCredential(user *WebAuthnUser, session *Session, c
 	}
 
 	// Step 8. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
-	if !SecureCompare(c.Challenge, session.Challenge) {
+	challenge, err := Base64URLEncodedByte(c.Challenge).Decode()
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode challenge: %w", err)
+	}
+
+	if !SecureCompareByte(challenge, session.Challenge) {
 		return nil, fmt.Errorf("challenge mismatch")
 	}
 
@@ -168,7 +169,7 @@ func (rp *RelyingParty) CreateCredential(user *WebAuthnUser, session *Session, c
 	}
 
 	// Step 15. If the Relying Party requires user verification for this registration, verify that the UV bit of the flags in authData is set.
-	if session.UserVerification == "required" && !authenticatorData.Flags.HasUserVerified() {
+	if session.UserVerification.IsRequired() && !authenticatorData.Flags.HasUserVerified() {
 		return nil, fmt.Errorf("user verification required, but UV bit not set")
 	}
 
@@ -240,14 +241,6 @@ func (rp *RelyingParty) CreateCredential(user *WebAuthnUser, session *Session, c
 		AttestationObject:         authenticatorAttestationResponse.rawAttestationObject,
 		AttestationClientDataJSON: authenticatorAttestationResponse.ClientDataJSON,
 	}, nil
-}
-
-func (rp *RelyingParty) VerifyUserID(user *WebAuthnUser, session *Session) error {
-	if !bytes.Equal(user.ID, session.UserID) {
-		return fmt.Errorf("mismatch UserID")
-	}
-
-	return nil
 }
 
 func VerifyAuthenticatorAttestationResponse(response *AuthenticatorAttestationResponse, session *Session, rp *RPConfig) error {

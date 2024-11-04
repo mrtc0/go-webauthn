@@ -41,10 +41,10 @@ type PublicKeyCredentialDescriptor struct {
 }
 
 type AuthenticatorSelectionCriteria struct {
-	AuthenticatorAttachment string `json:"authenticatorAttachment,omitempty"`
-	ResidentKey             string `json:"residentKey,omitempty"`
-	RequireResidentKey      bool   `json:"requireResidentKey,omitempty"`
-	UserVerification        string `json:"userVerification,omitempty"`
+	AuthenticatorAttachment string           `json:"authenticatorAttachment,omitempty"`
+	ResidentKey             string           `json:"residentKey,omitempty"`
+	RequireResidentKey      bool             `json:"requireResidentKey,omitempty"`
+	UserVerification        UserVerification `json:"userVerification,omitempty"`
 }
 
 type PublicKeyCredentialCreationOptions struct {
@@ -79,7 +79,7 @@ type PublicKeyCredentialRequestOptions struct {
 
 	RPID               string                               `json:"rpId"`
 	AlloedCredentials  []PublicKeyCredentialDescriptor      `json:"allowCredentials,omitempty"`
-	UserVerification   string                               `json:"userVerification,omitempty"`
+	UserVerification   UserVerification                     `json:"userVerification,omitempty"`
 	Hints              []string                             `json:"hints,omitempty"`
 	Attestation        string                               `json:"attestation,omitempty" default:"none"`
 	AttestationFormats []string                             `json:"attestationFormats,omitempty"`
@@ -145,6 +145,7 @@ func (a AuthenticatorAssertionResponseJSON) Unmarshal() (*AuthenticatorAssertion
 
 	var rawAttestationObject []byte
 	var attestationObject *AttestationObject
+
 	if a.AttestationObject != nil {
 		rawAttestationObject, err = Base64URLEncodedByte(*a.AttestationObject).Decode()
 		if err != nil {

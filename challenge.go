@@ -4,7 +4,7 @@ import "crypto/rand"
 
 const defaultChallengeLength = 16
 
-func GenerateChallenge() (challenge Base64URLEncodedByte, err error) {
+func GenerateChallenge() (challenge []byte, err error) {
 	challenge = make([]byte, defaultChallengeLength)
 
 	if _, err := rand.Read(challenge); err != nil {
@@ -12,4 +12,8 @@ func GenerateChallenge() (challenge Base64URLEncodedByte, err error) {
 	}
 
 	return challenge, nil
+}
+
+func IsValidChallenge(challenge []byte) bool {
+	return len(challenge) >= defaultChallengeLength
 }

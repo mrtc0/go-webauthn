@@ -17,7 +17,7 @@ func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(sessionID []byte,
 	credentialRequestOptions := &PublicKeyCredentialRequestOptions{
 		Challenge:        challenge,
 		RPID:             rp.RPConfig.ID,
-		UserVerification: "preferred",
+		UserVerification: UserVerificationPreferred,
 		Timeout:          defaultTimeout,
 		Attestation:      "none",
 	}
@@ -27,9 +27,9 @@ func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(sessionID []byte,
 	}
 
 	session := &Session{
-		Challenge:        challenge.String(),
+		ID:               sessionID,
+		Challenge:        challenge,
 		RPID:             rp.RPConfig.Origin,
-		UserID:           sessionID,
 		UserVerification: credentialRequestOptions.UserVerification,
 	}
 
@@ -100,8 +100,13 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 	}
 
 	// Step 11. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
-	if !SecureCompare(c.Challenge, session.Challenge) {
-		return nil, nil, fmt.Errorf("invalid challenge")
+	challenge, err := Base64URLEncodedByte(c.Challenge).Decode()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to decode challenge: %w", err)
+	}
+
+	if !SecureCompareByte(challenge, session.Challenge) {
+		return nil, nil, fmt.Errorf("challenge mismatch")
 	}
 
 	// Step 12. Verify that the value of C.origin is an origin expected by the Relying Party.
@@ -144,7 +149,7 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 
 	// Step 16. Determine whether user verification is required for this assertion.
 	// User verification SHOULD be required if, and only if, options.userVerification is set to required.
-	if session.UserVerification == "required" && !authenticatorAssertionResponse.AuthenticatorData.Flags.HasUserVerified() {
+	if session.UserVerification.IsRequired() && !authenticatorAssertionResponse.AuthenticatorData.Flags.HasUserVerified() {
 		return nil, nil, fmt.Errorf("user verification required")
 	}
 

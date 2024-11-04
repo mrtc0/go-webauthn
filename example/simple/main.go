@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -104,7 +105,12 @@ func (h RPHandler) registrationFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	record, err := h.rp.CreateCredential(webauthnUser, sessionStore[string(webauthnUser.ID)], &response)
+	if bytes.Compare(webauthnUser.ID, sessionStore[string(webauthnUser.ID)].ID) == -1 {
+		http.Error(w, "invalid session", http.StatusBadRequest)
+		return
+	}
+
+	record, err := h.rp.CreateCredential(sessionStore[string(webauthnUser.ID)], &response)
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
