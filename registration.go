@@ -10,7 +10,7 @@ import (
 type RPConfig struct {
 	ID              string
 	Name            string
-	Origin          string
+	Origins         []string
 	SubFrameOrigins []string
 }
 
@@ -70,7 +70,7 @@ func (rp *RelyingParty) CreateOptionsForRegistrationCeremony(user *WebAuthnUser,
 	session := &Session{
 		ID:               user.ID,
 		Challenge:        challenge,
-		RPID:             rp.RPConfig.Origin,
+		RPID:             rp.RPConfig.ID,
 		UserVerification: creationOptions.AuthenticatorSelection.UserVerification,
 	}
 
@@ -117,33 +117,12 @@ func (rp *RelyingParty) CreateCredential(session *Session, credential *Registrat
 	// 	> The Relying Party MUST NOT accept unexpected values of origin,
 	// 	> as doing so could allow a malicious website to obtain valid credentials
 	// Origin can be a case like https://example.com or a native app example-os:appid:...
-	if c.Origin != rp.RPConfig.Origin {
-		return nil, fmt.Errorf("origin mismatch")
-	}
-
 	// Step 10. If C.topOrigin is present:
 	// 	1. Verify that the Relying Party expects that this credential would have been created within an iframe that is not same-origin with its ancestors.
 	// 	2. Verify that the value of C.topOrigin matches the origin of a page that the Relying Party expects to be sub-framed within. See § 13.4.9 Validating the origin of a credential for guidance.
 	// ref. https://www.w3.org/TR/webauthn-3/#sctn-validating-origin
-	if c.TopOrigin != "" {
-		if !c.CrossOrigin {
-			return nil, fmt.Errorf("topOrigin present but crossOrigin is false")
-		}
-
-		if len(rp.RPConfig.SubFrameOrigins) > 0 {
-			found := false
-
-			for _, subFrameOrigin := range rp.RPConfig.SubFrameOrigins {
-				if c.TopOrigin == subFrameOrigin {
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				return nil, fmt.Errorf("top origin mismatch")
-			}
-		}
+	if valid, err := c.IsValidOrigin(rp.RPConfig.Origins, rp.RPConfig.SubFrameOrigins); !valid {
+		return nil, fmt.Errorf("failed to validate origin: %w", err)
 	}
 
 	// Step 11. Let hash be the result of computing a hash over response.clientDataJSON using SHA-256.

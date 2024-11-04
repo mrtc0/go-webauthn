@@ -26,11 +26,12 @@ func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(sessionID []byte,
 		opt(credentialRequestOptions)
 	}
 
-	session := &Session{
-		ID:               sessionID,
-		Challenge:        challenge,
-		RPID:             rp.RPConfig.Origin,
-		UserVerification: credentialRequestOptions.UserVerification,
+	// TODO: Set AllowedCredentials
+	session, err := NewWebAuthnSession(
+		sessionID, challenge, rp.RPConfig.ID, credentialRequestOptions.UserVerification, nil,
+	)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	return credentialRequestOptions, session, nil
@@ -111,29 +112,8 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 
 	// Step 12. Verify that the value of C.origin is an origin expected by the Relying Party.
 	// See § 13.4.9 Validating the origin of a credential for guidance.
-	if c.Origin != rp.RPConfig.Origin {
-		return nil, nil, fmt.Errorf("invalid origin")
-	}
-
-	if c.TopOrigin != "" {
-		if !c.CrossOrigin {
-			return nil, nil, fmt.Errorf("topOrigin present but crossOrigin is false")
-		}
-
-		if len(rp.RPConfig.SubFrameOrigins) > 0 {
-			found := false
-
-			for _, subFrameOrigin := range rp.RPConfig.SubFrameOrigins {
-				if c.TopOrigin == subFrameOrigin {
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				return nil, nil, fmt.Errorf("top origin mismatch")
-			}
-		}
+	if valid, err := c.IsValidOrigin(rp.RPConfig.Origins, rp.RPConfig.SubFrameOrigins); !valid {
+		return nil, nil, fmt.Errorf("failed to validate origin: %w", err)
 	}
 
 	// Step 14. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.

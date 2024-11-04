@@ -22,9 +22,9 @@ var sessionStore = make(map[string]*webauthn.Session)
 
 func main() {
 	rpConfig := &webauthn.RPConfig{
-		ID:     "localhost",
-		Name:   "localhost",
-		Origin: "http://localhost:8080",
+		ID:      "localhost",
+		Name:    "localhost",
+		Origins: []string{"http://localhost:8080"},
 	}
 
 	rp := webauthn.NewRelyingParty(rpConfig)

@@ -47,23 +47,6 @@ func (a AuthenticatorFlags) HasBackupState() bool {
 	return (a & FlagBackupState) == FlagBackupState
 }
 
-// https://www.w3.org/TR/webauthn-3/#client-data
-type CollectedClientData struct {
-	Type        string `json:"type"`
-	Challenge   string `json:"challenge"`
-	Origin      string `json:"origin"`
-	TopOrigin   string `json:"topOrigin,omitempty"`
-	CrossOrigin bool   `json:"crossOrigin,omitempty"`
-}
-
-func (c *CollectedClientData) IsRegistrationCelemoney() bool {
-	return c.Type == "webauthn.create"
-}
-
-func (c *CollectedClientData) IsAuthenticationCeremony() bool {
-	return c.Type == "webauthn.get"
-}
-
 type AuthenticatorResponse struct {
 	ClientDataJSON []byte `json:"clientDataJSON"`
 
