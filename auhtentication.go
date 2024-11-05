@@ -1,8 +1,6 @@
 package webauthn
 
 import (
-	"bytes"
-	"crypto/sha256"
 	"fmt"
 )
 
@@ -43,7 +41,7 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 	// Step 3. Let response be credential.response.
 	// If response is not an instance of AuthenticatorAssertionResponse,
 	// abort the ceremony with a user-visible error.
-	authenticatorAssertionResponse, err := credential.Response.Unmarshal()
+	authenticatorAssertionResponse, err := credential.Response.Parse()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
@@ -87,104 +85,63 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 		return nil, nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
-	// Step 7. Let cData, authData and sig denote the value of response’s clientDataJSON,
-	// authenticatorData, and signature respectively.
-	c := authenticatorAssertionResponse.GetParsedClientDataJSON()
-
-	rawAuthData := authenticatorAssertionResponse.rawAuthData
-
-	sig := authenticatorAssertionResponse.Signature
+	verifier := NewAuthenticatorAssertionResponseVerifier(authenticatorAssertionResponse, credentialRecord)
 
 	// Step 10. Verify that the value of C.type is the string webauthn.get.
-	if !c.IsAuthenticationCeremony() {
+	if !verifier.IsAuthenticationCeremony() {
 		return nil, nil, fmt.Errorf("invalid type. must be webauthn.get")
 	}
 
 	// Step 11. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
-	if result, err := c.VerifyChallenge(session.Challenge); !result {
+	if result, err := verifier.VerifyChallenge(session.Challenge); !result {
 		return nil, nil, fmt.Errorf("failed to verify challenge: %w", err)
 	}
 
 	// Step 12. Verify that the value of C.origin is an origin expected by the Relying Party.
 	// See § 13.4.9 Validating the origin of a credential for guidance.
-	if valid, err := c.IsValidOrigin(rp.RPConfig.Origins, rp.RPConfig.SubFrameOrigins); !valid {
+	if valid, err := verifier.VerifyOrigin(rp.RPConfig.Origins, rp.RPConfig.SubFrameOrigins); !valid {
 		return nil, nil, fmt.Errorf("failed to validate origin: %w", err)
 	}
 
 	// Step 14. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
-	rpIDHash := sha256.Sum256([]byte(rp.RPConfig.ID))
-	if !bytes.Equal(authenticatorAssertionResponse.AuthenticatorData.RPIDHash, rpIDHash[:]) {
-		return nil, nil, fmt.Errorf("rpIdHash mismatch")
+	if !verifier.VerifyRPID(rp.RPConfig.ID) {
+		return nil, nil, fmt.Errorf("RP ID mismatch")
 	}
 
 	// Step 15. Verify that the UP bit of the flags in authData is set.
-	if !authenticatorAssertionResponse.AuthenticatorData.Flags.HasUserPresent() {
+	if !verifier.VerifyUserPresent() {
 		return nil, nil, fmt.Errorf("user not present")
 	}
 
 	// Step 16. Determine whether user verification is required for this assertion.
 	// User verification SHOULD be required if, and only if, options.userVerification is set to required.
-	if session.UserVerification.IsRequired() && !authenticatorAssertionResponse.AuthenticatorData.Flags.HasUserVerified() {
-		return nil, nil, fmt.Errorf("user verification required")
+	if !verifier.VerifyUserVerified(session.UserVerification) {
+		return nil, nil, fmt.Errorf("user verification failed")
 	}
 
-	// Step 17. If the BE bit of the flags in authData is not set, verify that the BS bit is not set.
-	if !authenticatorAssertionResponse.AuthenticatorData.Flags.HasBackupEligible() && authenticatorAssertionResponse.AuthenticatorData.Flags.HasBackupState() {
-		return nil, nil, fmt.Errorf("BE bit is not set, but BS bit is set")
-	}
-
-	// Step 18. If the credential backup state is used as part of Relying Party business logic or policy,
-	// let currentBe and currentBs be the values of the BE and BS bits, respectively, of the flags in authData.
-	// Compare currentBe and currentBs with credentialRecord.backupEligible and credentialRecord.backupState:
-	if credentialRecord.BackupEligible && !authenticatorAssertionResponse.AuthenticatorData.Flags.HasBackupEligible() {
-		return nil, nil, fmt.Errorf("backup eligible but BE bit is not set")
-	}
-
-	if !credentialRecord.BackupEligible && authenticatorAssertionResponse.AuthenticatorData.Flags.HasBackupEligible() {
-		return nil, nil, fmt.Errorf("not backup eligible but BE bit is set")
+	if result, err := verifier.VerifyFlags(); !result {
+		return nil, nil, fmt.Errorf("failed to verify flags: %w", err)
 	}
 
 	// TODO: apply RP policy
 
 	// TODO: Step 19.
 
-	// Step 20. Let hash be the result of computing a hash over the cData using SHA-256.
-	cData := authenticatorAssertionResponse.ClientDataJSON
-	sum := sha256.Sum256([]byte(cData))
-	hash := sum[:]
-
-	// Step 21. Using credentialRecord.publicKey, verify that sig is a valid signature over the
-	// binary concatenation of authData and hash.
-	publicKey, err := credentialRecord.GetPublicKey()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get public key: %w", err)
-	}
-
-	sigData := append(rawAuthData, hash...)
-	valid, err := publicKey.Verify(sigData, sig)
-	if err != nil {
+	if result, err := verifier.VerifySignature(); !result {
 		return nil, nil, fmt.Errorf("failed to verify signature: %w", err)
-	}
-
-	if !valid {
-		return nil, nil, fmt.Errorf("invalid signature")
 	}
 
 	// Step 22. If authData.signCount is nonzero or credentialRecord.signCount is nonzero,
 	// then run the following sub-step:
-	validSignCount := false
-	if authenticatorAssertionResponse.AuthenticatorData.SignCount > credentialRecord.SignCount {
-		validSignCount = true
-	} else {
-		// TODO: apply RP policy
-		validSignCount = false
-		fmt.Println("singCount: ", validSignCount)
+	if result, err := verifier.EvaluateSignCount(); !result {
+		fmt.Printf("failed to evaluate sign count: %s\n", err)
+		// return nil, nil, fmt.Errorf("failed to evaluate sign count: %w", err)
 	}
 
 	// Step 23. If response.attestationObject is present and the Relying Party wishes to verify the attestation
 	// then perform CBOR decoding on attestationObject to obtain the attestation statement format fmt,
 	// and the attestation statement attStmt.
-	if result, err := authenticatorAssertionResponse.VerifyAttestaionObject(*credentialRecord, hash); !result {
+	if result, err := verifier.VerifyAttestaionObject(); !result {
 		return nil, nil, fmt.Errorf("failed to verify attestation object: %w", err)
 	}
 

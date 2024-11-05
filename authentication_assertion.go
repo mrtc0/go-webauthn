@@ -2,6 +2,7 @@ package webauthn
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/fxamacker/cbor/v2"
@@ -35,7 +36,22 @@ type AuthenticatorAssertionResponse struct {
 	rawAttestationObject []byte
 }
 
-func (a AuthenticatorAssertionResponseJSON) Unmarshal() (*AuthenticatorAssertionResponse, error) {
+type authenticatorAssertionResponseVerifier struct {
+	response         *AuthenticatorAssertionResponse
+	credentialRecord *CredentialRecord
+	clientDataJSON   *CollectedClientData
+}
+
+func NewAuthenticatorAssertionResponseVerifier(response *AuthenticatorAssertionResponse, credentialRecord *CredentialRecord) *authenticatorAssertionResponseVerifier {
+	c := response.GetParsedClientDataJSON()
+	return &authenticatorAssertionResponseVerifier{
+		response:         response,
+		credentialRecord: credentialRecord,
+		clientDataJSON:   &c,
+	}
+}
+
+func (a AuthenticatorAssertionResponseJSON) Parse() (*AuthenticatorAssertionResponse, error) {
 	rawAuthData, err := Base64URLEncodedByte(a.AuthenticatorData).Decode()
 	if err != nil {
 		return nil, err
@@ -86,30 +102,122 @@ func (a AuthenticatorAssertionResponseJSON) Unmarshal() (*AuthenticatorAssertion
 	}, nil
 }
 
-func (a *AuthenticatorAssertionResponse) VerifyAttestaionObject(credential CredentialRecord, hash []byte) (bool, error) {
-	if a.AttestationObject == nil {
+func (a *authenticatorAssertionResponseVerifier) IsAuthenticationCeremony() bool {
+	return a.clientDataJSON.IsAuthenticationCeremony()
+}
+
+func (a *authenticatorAssertionResponseVerifier) VerifyChallenge(challenge []byte) (bool, error) {
+	return a.clientDataJSON.VerifyChallenge(challenge)
+}
+
+func (a *authenticatorAssertionResponseVerifier) VerifyOrigin(rpOrigins, rpSubFrameOrigins []string) (bool, error) {
+	return a.clientDataJSON.IsValidOrigin(rpOrigins, rpSubFrameOrigins)
+}
+
+func (a *authenticatorAssertionResponseVerifier) VerifyRPID(rpID string) bool {
+	rpIDHash := sha256.Sum256([]byte(rpID))
+	return bytes.Equal(a.response.AuthenticatorData.RPIDHash, rpIDHash[:])
+}
+
+func (a *authenticatorAssertionResponseVerifier) VerifyUserPresent() bool {
+	return a.response.AuthenticatorData.Flags.HasUserPresent()
+}
+
+func (a *authenticatorAssertionResponseVerifier) VerifyUserVerified(userVerificationOption UserVerification) bool {
+	if userVerificationOption.IsRequired() && !a.response.AuthenticatorData.Flags.HasUserVerified() {
+		return false
+	}
+
+	return true
+}
+
+func (a *authenticatorAssertionResponseVerifier) VerifyFlags() (bool, error) {
+	// Step 17. If the BE bit of the flags in authData is not set, verify that the BS bit is not set.
+	if !a.response.AuthenticatorData.Flags.HasBackupEligible() && a.response.AuthenticatorData.Flags.HasBackupState() {
+		return false, fmt.Errorf("BE bit is not set, but BS bit is set")
+	}
+
+	// Step 18. If the credential backup state is used as part of Relying Party business logic or policy,
+	// let currentBe and currentBs be the values of the BE and BS bits, respectively, of the flags in authData.
+	// Compare currentBe and currentBs with credentialRecord.backupEligible and credentialRecord.backupState:
+	if a.credentialRecord.BackupEligible && !a.response.AuthenticatorData.Flags.HasBackupEligible() {
+		return false, fmt.Errorf("backup eligible but BE bit is not set")
+	}
+
+	if !a.credentialRecord.BackupEligible && a.response.AuthenticatorData.Flags.HasBackupEligible() {
+		return false, fmt.Errorf("not backup eligible but BE bit is set")
+	}
+
+	return true, nil
+}
+
+func (a *authenticatorAssertionResponseVerifier) VerifySignature() (bool, error) {
+	// Step 20. Let hash be the result of computing a hash over the cData using SHA-256.
+	cData := a.response.ClientDataJSON
+	sum := sha256.Sum256([]byte(cData))
+	hash := sum[:]
+
+	rawAuthData := a.response.rawAuthData
+	sig := a.response.Signature
+
+	// Step 21. Using credentialRecord.publicKey, verify that sig is a valid signature over the
+	// binary concatenation of authData and hash.
+	publicKey, err := a.credentialRecord.GetPublicKey()
+	if err != nil {
+		return false, fmt.Errorf("failed to get public key: %w", err)
+	}
+
+	sigData := append(rawAuthData, hash...)
+	valid, err := publicKey.Verify(sigData, sig)
+	if err != nil {
+		return false, fmt.Errorf("failed to verify signature: %w", err)
+	}
+
+	if !valid {
+		return false, fmt.Errorf("invalid signature")
+	}
+
+	return true, nil
+}
+
+func (a *authenticatorAssertionResponseVerifier) EvaluateSignCount() (bool, error) {
+	if a.response.AuthenticatorData.SignCount > a.credentialRecord.SignCount {
 		return true, nil
 	}
 
-	if !a.AuthenticatorData.Flags.HasAttestedCredentialData() {
+	// TODO: Apply RP policy
+
+	return false, nil
+}
+
+func (a *authenticatorAssertionResponseVerifier) VerifyAttestaionObject() (bool, error) {
+	if a.response.AttestationObject == nil {
+		return true, nil
+	}
+
+	if !a.response.AuthenticatorData.Flags.HasAttestedCredentialData() {
 		return false, fmt.Errorf("attested credential data is not present")
 	}
 
 	authenticatorData := &AuthenticatorData{}
-	if err := authenticatorData.Unmarshal(a.AttestationObject.AuthData); err != nil {
+	if err := authenticatorData.Unmarshal(a.response.AttestationObject.AuthData); err != nil {
 		return false, fmt.Errorf("failed to unmarshal authenticator data: %w", err)
 	}
 
 	credentialID := authenticatorData.AttestedCredentialData.CredentialID
 	credentialPublicKey := authenticatorData.AttestedCredentialData.CredentialPublicKey
-	if !bytes.Equal(credentialID, credential.ID) || !bytes.Equal(credentialPublicKey, credential.PublicKey) {
+	if !bytes.Equal(credentialID, a.credentialRecord.ID) || !bytes.Equal(credentialPublicKey, a.credentialRecord.PublicKey) {
 		return false, fmt.Errorf("credential mismatch")
 	}
 
+	cData := a.response.ClientDataJSON
+	sum := sha256.Sum256([]byte(cData))
+	hash := sum[:]
+
 	verifier, err := DetermineAttestaionStatement(
-		a.AttestationObject.Format,
-		a.AttestationObject.AttStatement,
-		a.rawAuthData,
+		a.response.AttestationObject.Format,
+		a.response.AttestationObject.AttStatement,
+		a.response.rawAuthData,
 		hash,
 	)
 
