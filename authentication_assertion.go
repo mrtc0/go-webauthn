@@ -36,19 +36,61 @@ type AuthenticatorAssertionResponse struct {
 	rawAttestationObject []byte
 }
 
+type SignCountEvaluater interface {
+	EvaluateSignCount(requestSignCount uint32, currentSignCount uint32) (bool, error)
+}
+
+// DenyWhenClonedAuthenticator This is a SignCountEvaluater implementation that denies the request when the requestSignCount is greater than the currentSignCount.
+func DenyWhenClonedAuthenticator(requestSignCount uint32, currentSignCount uint32) (bool, error) {
+	if requestSignCount > currentSignCount {
+		return true, nil
+	}
+
+	return false, nil
+}
+
 type authenticatorAssertionResponseVerifier struct {
 	response         *AuthenticatorAssertionResponse
 	credentialRecord *CredentialRecord
 	clientDataJSON   *CollectedClientData
+
+	signCountEvaluater SignCountEvaluater
 }
 
-func NewAuthenticatorAssertionResponseVerifier(response *AuthenticatorAssertionResponse, credentialRecord *CredentialRecord) *authenticatorAssertionResponseVerifier {
+type AuthenticatorAssertionResponseVerifier interface {
+	IsAuthenticationCeremony() bool
+	VerifyChallenge(challenge []byte) (bool, error)
+	VerifyOrigin(rpOrigins, rpSubFrameOrigins []string) (bool, error)
+	VerifyRPID(rpID string) bool
+	VerifyUserPresent() bool
+	VerifyUserVerified(userVerificationOption UserVerification) bool
+	VerifyFlags() (bool, error)
+	VerifySignature() (bool, error)
+	EvaluateSignCount() (bool, error)
+	VerifyAttestaionObject() (bool, error)
+}
+
+type AuthenticatorAssertionResponseVerifierOption func(*authenticatorAssertionResponseVerifier)
+
+func WithSignCountEvaluater(evaluater SignCountEvaluater) AuthenticatorAssertionResponseVerifierOption {
+	return func(v *authenticatorAssertionResponseVerifier) {
+		v.signCountEvaluater = evaluater
+	}
+}
+
+func NewAuthenticatorAssertionResponseVerifier(response *AuthenticatorAssertionResponse, credentialRecord *CredentialRecord, opts ...AuthenticatorAssertionResponseVerifierOption) *authenticatorAssertionResponseVerifier {
 	c := response.GetParsedClientDataJSON()
-	return &authenticatorAssertionResponseVerifier{
+	verifier := &authenticatorAssertionResponseVerifier{
 		response:         response,
 		credentialRecord: credentialRecord,
 		clientDataJSON:   &c,
 	}
+
+	for _, opt := range opts {
+		opt(verifier)
+	}
+
+	return verifier
 }
 
 func (a AuthenticatorAssertionResponseJSON) Parse() (*AuthenticatorAssertionResponse, error) {
@@ -181,13 +223,16 @@ func (a *authenticatorAssertionResponseVerifier) VerifySignature() (bool, error)
 }
 
 func (a *authenticatorAssertionResponseVerifier) EvaluateSignCount() (bool, error) {
-	if a.response.AuthenticatorData.SignCount > a.credentialRecord.SignCount {
+	// (Maybe) Authenticator does not implement signature counter
+	if a.response.AuthenticatorData.SignCount == 0 || a.credentialRecord.SignCount == 0 {
 		return true, nil
 	}
 
-	// TODO: Apply RP policy
+	if a.signCountEvaluater == nil {
+		return true, nil
+	}
 
-	return false, nil
+	return a.signCountEvaluater.EvaluateSignCount(a.response.AuthenticatorData.SignCount, a.credentialRecord.SignCount)
 }
 
 func (a *authenticatorAssertionResponseVerifier) VerifyAttestaionObject() (bool, error) {
