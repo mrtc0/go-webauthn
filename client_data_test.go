@@ -71,3 +71,44 @@ func TestCollectedClientData_IsValidOrigin(t *testing.T) {
 	}
 
 }
+
+func TestCollectedClientData_VerifyChallenge(t *testing.T) {
+	t.Parallel()
+
+	testCases := map[string]struct {
+		ccd       *webauthn.CollectedClientData
+		challenge []byte
+		expected  bool
+	}{
+		"OK: same challenge": {
+			ccd: &webauthn.CollectedClientData{
+				Challenge: "dGhpc2lzY2hhbGxlbmdl",
+			},
+			challenge: []byte("thisischallenge"),
+			expected:  true,
+		},
+		"NG: different challenge": {
+			ccd: &webauthn.CollectedClientData{
+				Challenge: "dGhpc2lzY2hhbGxlbmdl",
+			},
+			challenge: []byte("THISISCHALLENGE"),
+			expected:  false,
+		},
+	}
+
+	for name, tc := range testCases {
+		tc := tc
+
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			actual, err := tc.ccd.VerifyChallenge(tc.challenge)
+			if tc.expected {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+			assert.Equal(t, tc.expected, actual)
+		})
+	}
+}

@@ -101,13 +101,8 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 	}
 
 	// Step 11. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
-	challenge, err := Base64URLEncodedByte(c.Challenge).Decode()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to decode challenge: %w", err)
-	}
-
-	if !SecureCompareByte(challenge, session.Challenge) {
-		return nil, nil, fmt.Errorf("challenge mismatch")
+	if result, err := c.VerifyChallenge(session.Challenge); !result {
+		return nil, nil, fmt.Errorf("failed to verify challenge: %w", err)
 	}
 
 	// Step 12. Verify that the value of C.origin is an origin expected by the Relying Party.

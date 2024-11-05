@@ -55,3 +55,16 @@ func (c *CollectedClientData) IsValidOrigin(rpOrigins []string, rpSubFrameOrigin
 
 	return true, nil
 }
+
+func (c *CollectedClientData) VerifyChallenge(expectChallenge []byte) (bool, error) {
+	challenge, err := Base64URLEncodedByte(c.Challenge).Decode()
+	if err != nil {
+		return false, fmt.Errorf("failed to decode challenge: %w", err)
+	}
+
+	if !SecureCompareByte(challenge, expectChallenge) {
+		return false, fmt.Errorf("challenge mismatch")
+	}
+
+	return true, nil
+}
