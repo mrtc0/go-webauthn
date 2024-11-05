@@ -184,36 +184,8 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 	// Step 23. If response.attestationObject is present and the Relying Party wishes to verify the attestation
 	// then perform CBOR decoding on attestationObject to obtain the attestation statement format fmt,
 	// and the attestation statement attStmt.
-
-	if authenticatorAssertionResponse.AttestationObject != nil {
-		if !authenticatorAssertionResponse.AuthenticatorData.Flags.HasAttestedCredentialData() {
-			return nil, nil, fmt.Errorf("attested credential data is not present")
-		}
-
-		authenticatorData := &AuthenticatorData{}
-		if err := authenticatorData.Unmarshal(authenticatorAssertionResponse.AttestationObject.AuthData); err != nil {
-			return nil, nil, fmt.Errorf("failed to unmarshal authenticator data: %w", err)
-		}
-
-		credentialID := authenticatorData.AttestedCredentialData.CredentialID
-		credentialPublicKey := authenticatorData.AttestedCredentialData.CredentialPublicKey
-		if bytes.Equal(credentialID, credentialRecord.ID) || bytes.Equal(credentialPublicKey, credentialRecord.PublicKey) {
-			return nil, nil, fmt.Errorf("credential mismatch")
-		}
-
-		verifier, err := DetermineAttestaionStatement(
-			authenticatorAssertionResponse.AttestationObject.Format,
-			authenticatorAssertionResponse.AttestationObject.AttStatement,
-			authenticatorAssertionResponse.rawAuthData,
-			hash)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		_, _, err = verifier.Verify()
-		if err != nil {
-			return nil, nil, err
-		}
+	if result, err := authenticatorAssertionResponse.VerifyAttestaionObject(*credentialRecord, hash); !result {
+		return nil, nil, fmt.Errorf("failed to verify attestation object: %w", err)
 	}
 
 	// Step 24. Update credentialRecord with new state values:
