@@ -37,13 +37,14 @@ func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(sessionID []byte,
 
 type DiscoveryUserHandler func(credentialRawID []byte, userHandle string) (*WebAuthnUser, *CredentialRecord, error)
 
-func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Session, credential *AuthenticationResponseJSON) (*WebAuthnUser, *CredentialRecord, error) {
+// AuthenticationWithDiscoverableCredential is the ceremony for authenticating a user with a discoverable credential.
+func (rp *RelyingParty) AuthenticationWithDiscoverableCredential(handler DiscoveryUserHandler, session *Session, credential *AuthenticationResponseJSON) (*WebAuthnUser, *CredentialRecord, error) {
 	// Step 3. Let response be credential.response.
 	// If response is not an instance of AuthenticatorAssertionResponse,
 	// abort the ceremony with a user-visible error.
 	authenticatorAssertionResponse, err := credential.Response.Parse()
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to unmarshal response: %w", err)
+		return nil, nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 
 	// TODO: Step 4. Let clientExtensionResults be the result of calling credential.getClientExtensionResults().
@@ -54,7 +55,6 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 	if len(session.AllowedCredentials) > 0 {
 		found := false
 		for _, allowedCredential := range session.AllowedCredentials {
-			fmt.Println(allowedCredential.ID, []byte(credential.ID))
 			if SecureCompareByte(allowedCredential.ID, []byte(credential.ID)) {
 				found = true
 				break
@@ -80,7 +80,12 @@ func (rp *RelyingParty) Authentication(handler DiscoveryUserHandler, session *Se
 		return nil, nil, fmt.Errorf("user handle is not present")
 	}
 
-	user, credentialRecord, err := handler([]byte(credential.RawID), authenticatorAssertionResponse.UserHandle)
+	decodedCredentialID, err := Base64URLEncodedByte(credential.RawID).Decode()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to decode credential rawID: %w", err)
+	}
+
+	user, credentialRecord, err := handler(decodedCredentialID, authenticatorAssertionResponse.UserHandle)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get user: %w", err)
 	}
