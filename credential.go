@@ -1,11 +1,7 @@
 package webauthn
 
 import (
-	"crypto"
-	"crypto/ecdsa"
-	"crypto/elliptic"
 	"fmt"
-	"math/big"
 
 	"github.com/fxamacker/cbor/v2"
 )
@@ -63,15 +59,6 @@ type PublicKeyCredentialCreationOptions struct {
 	Extensions             AuthenticationExtensionsClientInputs `json:"extensions,omitempty"`
 }
 
-type RegistrationResponseJSON struct {
-	ID                      string                                    `json:"id"`
-	RawID                   string                                    `json:"rawId"`
-	Response                AuthenticatorAttestationResponseJSON      `json:"response"`
-	AuthenticatorAttachment string                                    `json:"authenticatorAttachment"`
-	ClientExtensionResults  AuthenticationExtensionsClientOutputsJSON `json:"clientExtensionResults"`
-	Type                    string                                    `json:"type"`
-}
-
 // https://www.w3.org/TR/webauthn-3/#dictdef-publickeycredentialrequestoptions
 type PublicKeyCredentialRequestOptions struct {
 	Challenge Base64URLEncodedByte `json:"challenge"`
@@ -96,14 +83,6 @@ func (o PublicKeyCredentialRequestOptions) IsValid() (bool, error) {
 	}
 
 	return true, nil
-}
-
-type PublicKeyCredential struct {
-	ID                      string                                    `json:"id"`
-	RawID                   string                                    `json:"rawId"`
-	AuthenticatorAttachment string                                    `json:"authenticatorAttachment"`
-	ClientExtensionResults  AuthenticationExtensionsClientOutputsJSON `json:"clientExtensionResults"`
-	Type                    string                                    `json:"type"`
 }
 
 // https://www.w3.org/TR/webauthn-3/#credential-record
@@ -133,83 +112,6 @@ func (c *CredentialRecord) UpdateState(authenticatorAssertionResponse *Authentic
 	c.AttestationObject = authenticatorAssertionResponse.rawAttestationObject
 	c.AttestationClientDataJSON = authenticatorAssertionResponse.ClientDataJSON
 }
-
-type PublicKeyData interface {
-	Verify(data []byte, signature []byte) (bool, error)
-}
-
-// publicKeyData represents a COSE_Key object
-// https://datatracker.ietf.org/doc/html/rfc8152#section-13
-type publicKeyData struct {
-	// https://datatracker.ietf.org/doc/html/rfc8152#section-13
-	KeyType   int64 `cbor:"1,keyasint" json:"kty"` // required
-	Algorithm int64 `cbor:"3,keyasint" json:"alg"` // required
-}
-
-type OKPPublicKeyData struct {
-	publicKeyData publicKeyData
-}
-
-// EC2PublicKeyData represents an Elliptic Curve public key
-// https://datatracker.ietf.org/doc/html/rfc8152#section-8.1
-// https://datatracker.ietf.org/doc/html/rfc8392#appendix-A.2.3
-type EC2PublicKeyData struct {
-	publicKeyData
-
-	Curve       int64  `cbor:"-1,keyasint" json:"crv"`
-	XCoordinate []byte `cbor:"-2,keyasint" json:"x"`
-	YCoordinate []byte `cbor:"-3,keyasint" json:"y"`
-}
-
-func (p *OKPPublicKeyData) Verify(data []byte, signature []byte) (bool, error) {
-	return false, nil
-}
-
-func (p *EC2PublicKeyData) Verify(data []byte, signature []byte) (bool, error) {
-	var curve elliptic.Curve
-	var hasher crypto.Hash
-
-	// https://datatracker.ietf.org/doc/html/rfc8152#section-8.1
-	switch p.Algorithm {
-	case int64(AlgES256):
-		curve = elliptic.P256()
-		hasher = crypto.SHA256
-	case int64(AlgES384):
-		curve = elliptic.P384()
-		hasher = crypto.SHA384
-	case int64(AlgES512):
-		curve = elliptic.P521()
-		hasher = crypto.SHA512
-	default:
-		return false, fmt.Errorf("unsupported algorithm: %d", p.Algorithm)
-	}
-
-	pubKey := &ecdsa.PublicKey{
-		Curve: curve,
-		X:     new(big.Int).SetBytes(p.XCoordinate),
-		Y:     new(big.Int).SetBytes(p.YCoordinate),
-	}
-
-	h := hasher.New()
-	if _, err := h.Write(data); err != nil {
-		return false, err
-	}
-
-	return ecdsa.VerifyASN1(pubKey, h.Sum(nil), signature), nil
-}
-
-type COSEKeyType int
-
-// https://www.iana.org/assignments/cose/cose.xhtml#key-type
-const (
-	COSEKeyTypeReserved COSEKeyType = iota
-	COSEKeyTypeOKP
-	COSEKeyTypeEC2
-	COSEKeyTypeRSA
-	COSEKeyTypeSymmetric
-	COSEKeyTypeHSS_LMS
-	COSEKeyTypeWalnutDSA
-)
 
 // The credential public key encoded in COSE_Key format, using the CTAP2 canonical CBOR encoding form.
 func (r *CredentialRecord) GetPublicKey() (PublicKeyData, error) {
@@ -250,5 +152,26 @@ func (r *CredentialRecord) GetPublicKey() (PublicKeyData, error) {
 		return ec2PublicKey, nil
 	default:
 		return nil, fmt.Errorf("unsupported key type: %d", pk.KeyType)
+	}
+}
+
+func newUserEntity(id []byte, name, displayName string) (*PublicKeyCredentialUserEntity, error) {
+	if len(id) > 64 || len(id) == 0 {
+		return nil, fmt.Errorf("ID must be between 1 and 64 bytes")
+	}
+
+	return &PublicKeyCredentialUserEntity{
+		ID:          id,
+		Name:        name,
+		DisplayName: displayName,
+	}, nil
+}
+
+func newPublicKeyCredentialRPEntity(id, name string) *PublicKeyCredentialRpEntity {
+	return &PublicKeyCredentialRpEntity{
+		ID: id,
+		PublicKeyCredentialEntity: PublicKeyCredentialEntity{
+			Name: name,
+		},
 	}
 }

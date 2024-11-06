@@ -8,8 +8,16 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
+type PublicKeyCredentialJSON struct {
+	ID                      string                                    `json:"id"`
+	RawID                   string                                    `json:"rawId"`
+	AuthenticatorAttachment string                                    `json:"authenticatorAttachment"`
+	ClientExtensionResults  AuthenticationExtensionsClientOutputsJSON `json:"clientExtensionResults"`
+	Type                    string                                    `json:"type"`
+}
+
 type AuthenticationResponseJSON struct {
-	PublicKeyCredential
+	PublicKeyCredentialJSON
 
 	Response AuthenticatorAssertionResponseJSON `json:"response"`
 }

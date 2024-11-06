@@ -2,31 +2,15 @@ package webauthn
 
 import (
 	"fmt"
-	"time"
 )
 
-type RPConfig struct {
-	ID              string
-	Name            string
-	Origins         []string
-	SubFrameOrigins []string
-}
-
-type RelyingParty struct {
-	RPConfig *RPConfig
-}
-
-type WebAuthnUser struct {
-	ID          []byte
-	Name        string
-	DisplayName string
-	Credentials []CredentialRecord
-}
-
-var defaultTimeout = (time.Second * 120).Milliseconds()
-
-func NewRelyingParty(rp *RPConfig) *RelyingParty {
-	return &RelyingParty{RPConfig: rp}
+type RegistrationResponseJSON struct {
+	ID                      string                                    `json:"id"`
+	RawID                   string                                    `json:"rawId"`
+	Response                AuthenticatorAttestationResponseJSON      `json:"response"`
+	AuthenticatorAttachment string                                    `json:"authenticatorAttachment"`
+	ClientExtensionResults  AuthenticationExtensionsClientOutputsJSON `json:"clientExtensionResults"`
+	Type                    string                                    `json:"type"`
 }
 
 type RegistrationCeremonyOption func(*PublicKeyCredentialCreationOptions)
@@ -127,25 +111,4 @@ func (rp *RelyingParty) CreateCredential(session *Session, credential *Registrat
 		AttestationObject:         authenticatorAttestationResponse.rawAttestationObject,
 		AttestationClientDataJSON: authenticatorAttestationResponse.ClientDataJSON,
 	}, nil
-}
-
-func newUserEntity(id []byte, name, displayName string) (*PublicKeyCredentialUserEntity, error) {
-	if len(id) > 64 || len(id) == 0 {
-		return nil, fmt.Errorf("ID must be between 1 and 64 bytes")
-	}
-
-	return &PublicKeyCredentialUserEntity{
-		ID:          id,
-		Name:        name,
-		DisplayName: displayName,
-	}, nil
-}
-
-func newPublicKeyCredentialRPEntity(id, name string) *PublicKeyCredentialRpEntity {
-	return &PublicKeyCredentialRpEntity{
-		ID: id,
-		PublicKeyCredentialEntity: PublicKeyCredentialEntity{
-			Name: name,
-		},
-	}
 }
