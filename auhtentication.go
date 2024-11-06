@@ -146,7 +146,7 @@ func (rp *RelyingParty) AuthenticationWithDiscoverableCredential(handler Discove
 
 	// TODO: apply RP policy
 
-	// TODO: Step 19.
+	// TODO: Step 19. Verify that the values of the client extension outputs
 
 	if result, err := verifier.VerifySignature(); !result {
 		return nil, nil, fmt.Errorf("failed to verify signature: %w", err)
@@ -167,15 +167,7 @@ func (rp *RelyingParty) AuthenticationWithDiscoverableCredential(handler Discove
 	}
 
 	// Step 24. Update credentialRecord with new state values:
-	credentialRecord.SignCount = authenticatorAssertionResponse.AuthenticatorData.SignCount
-	credentialRecord.BackupState = authenticatorAssertionResponse.AuthenticatorData.Flags.HasBackupState()
-
-	if !credentialRecord.UvInitialized {
-		credentialRecord.UvInitialized = authenticatorAssertionResponse.AuthenticatorData.Flags.HasUserVerified()
-	}
-
-	credentialRecord.AttestationObject = authenticatorAssertionResponse.rawAttestationObject
-	credentialRecord.AttestationClientDataJSON = authenticatorAssertionResponse.ClientDataJSON
+	credentialRecord.UpdateState(authenticatorAssertionResponse)
 
 	return user, credentialRecord, nil
 }

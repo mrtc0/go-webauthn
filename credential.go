@@ -122,6 +122,18 @@ type CredentialRecord struct {
 	AttestationClientDataJSON []byte
 }
 
+func (c *CredentialRecord) UpdateState(authenticatorAssertionResponse *AuthenticatorAssertionResponse) {
+	c.SignCount = authenticatorAssertionResponse.AuthenticatorData.SignCount
+	c.BackupState = authenticatorAssertionResponse.AuthenticatorData.Flags.HasBackupState()
+
+	if !c.UvInitialized {
+		c.UvInitialized = authenticatorAssertionResponse.AuthenticatorData.Flags.HasUserVerified()
+	}
+
+	c.AttestationObject = authenticatorAssertionResponse.rawAttestationObject
+	c.AttestationClientDataJSON = authenticatorAssertionResponse.ClientDataJSON
+}
+
 type PublicKeyData interface {
 	Verify(data []byte, signature []byte) (bool, error)
 }
