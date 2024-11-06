@@ -81,9 +81,21 @@ type PublicKeyCredentialRequestOptions struct {
 	AlloedCredentials  []PublicKeyCredentialDescriptor      `json:"allowCredentials,omitempty"`
 	UserVerification   UserVerification                     `json:"userVerification,omitempty"`
 	Hints              []string                             `json:"hints,omitempty"`
-	Attestation        string                               `json:"attestation,omitempty" default:"none"`
+	Attestation        AttestationConveyancePreference      `json:"attestation,omitempty" default:"none"`
 	AttestationFormats []string                             `json:"attestationFormats,omitempty"`
 	Extensions         AuthenticationExtensionsClientInputs `json:"extensions,omitempty"`
+}
+
+func (o PublicKeyCredentialRequestOptions) IsValid() (bool, error) {
+	if !o.UserVerification.IsValid() {
+		return false, fmt.Errorf("invalid user verification")
+	}
+
+	if !o.Attestation.IsValid() {
+		return false, fmt.Errorf("invalid attestation")
+	}
+
+	return true, nil
 }
 
 type PublicKeyCredential struct {

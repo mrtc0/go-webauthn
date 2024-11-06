@@ -6,6 +6,18 @@ import (
 
 type AuthenticationCeremonyOption func(*PublicKeyCredentialRequestOptions)
 
+func WithUserVerification(userVerification UserVerification) AuthenticationCeremonyOption {
+	return func(opts *PublicKeyCredentialRequestOptions) {
+		opts.UserVerification = userVerification
+	}
+}
+
+func WithAttestaion(attestation AttestationConveyancePreference) AuthenticationCeremonyOption {
+	return func(opts *PublicKeyCredentialRequestOptions) {
+		opts.Attestation = attestation
+	}
+}
+
 func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(sessionID []byte, opts ...AuthenticationCeremonyOption) (*PublicKeyCredentialRequestOptions, *Session, error) {
 	challenge, err := GenerateChallenge()
 	if err != nil {
@@ -17,11 +29,15 @@ func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(sessionID []byte,
 		RPID:             rp.RPConfig.ID,
 		UserVerification: UserVerificationPreferred,
 		Timeout:          defaultTimeout,
-		Attestation:      "none",
+		Attestation:      AttestationConveyancePreferenceNone,
 	}
 
 	for _, opt := range opts {
 		opt(credentialRequestOptions)
+	}
+
+	if valid, err := credentialRequestOptions.IsValid(); !valid {
+		return nil, nil, fmt.Errorf("invalid options: %w", err)
 	}
 
 	// TODO: Set AllowedCredentials

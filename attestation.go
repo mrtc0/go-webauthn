@@ -6,6 +6,28 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
+type AttestationConveyancePreference string
+
+const (
+	AttestationConveyancePreferenceNone       AttestationConveyancePreference = "none"
+	AttestationConveyancePreferenceDirect     AttestationConveyancePreference = "direct"
+	AttestationConveyancePreferenceIndirect   AttestationConveyancePreference = "indirect"
+	AttestationConveyancePreferenceEnterprise AttestationConveyancePreference = "enterprise"
+)
+
+func (a AttestationConveyancePreference) String() string {
+	return string(a)
+}
+
+func (a AttestationConveyancePreference) IsValid() bool {
+	switch a {
+	case AttestationConveyancePreferenceNone, AttestationConveyancePreferenceDirect, AttestationConveyancePreferenceIndirect, AttestationConveyancePreferenceEnterprise:
+		return true
+	default:
+		return false
+	}
+}
+
 // https://www.w3.org/TR/webauthn-3/#sctn-attested-credential-data
 type AttestedCredentialData struct {
 	AAGUID              []byte `json:"aaguid"`
