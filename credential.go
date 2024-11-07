@@ -54,7 +54,7 @@ type PublicKeyCredentialCreationOptions struct {
 	ExcludeCredentials     []PublicKeyCredentialDescriptor      `json:"excludeCredentials,omitempty"`
 	AuthenticatorSelection AuthenticatorSelectionCriteria       `json:"authenticatorSelection,omitempty"`
 	Hints                  []string                             `json:"hints,omitempty"`
-	Attestation            string                               `json:"attestation,omitempty"`
+	Attestation            AttestationConveyancePreference      `json:"attestation,omitempty"`
 	AttestationFormats     []string                             `json:"attestationFormats,omitempty"`
 	Extensions             AuthenticationExtensionsClientInputs `json:"extensions,omitempty"`
 }

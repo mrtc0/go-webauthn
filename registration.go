@@ -42,7 +42,7 @@ func (rp *RelyingParty) CreateOptionsForRegistrationCeremony(user *WebAuthnUser,
 		Timeout:                defaultTimeout,
 		ExcludeCredentials:     []PublicKeyCredentialDescriptor{},
 		AuthenticatorSelection: AuthenticatorSelectionCriteria{},
-		Attestation:            "none",
+		Attestation:            AttestationConveyancePreferenceNone,
 	}
 
 	for _, opt := range opts {
