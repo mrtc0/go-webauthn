@@ -31,20 +31,39 @@ type AuthenticatorAttestationResponse struct {
 	publicKeyAlgorithm int64
 }
 
-type authenticatorAttestationResponseVerifier struct {
-	response          *AuthenticatorAttestationResponse
-	clientDataJSON    *CollectedClientData
-	attestationObject *AttestationObject
-	authenticatorData *AuthenticatorData
+type registrationCelemonyVerifier struct {
+	response          AuthenticatorAttestationResponse
+	clientDataJSON    CollectedClientData
+	attestationObject AttestationObject
+	authenticatorData AuthenticatorData
 }
 
-type AuthenticatorAttestationResponseVerifier interface {
-	IsValidCelemony() bool
+type RegistrationCelemonyVerifier interface {
+	VerifyCelemony() bool
 	VerifyChallenge(challenge []byte) (bool, error)
 	VerifyOrigin(rpOrigins, rpSubFrameOrigins []string) (bool, error)
 	VerifyAuthenticatorData(rpID string, userVerification UserVerification) (bool, error)
 
 	AuthenticatorData() AuthenticatorData
+	Response() AuthenticatorAttestationResponse
+	ClientDataJSON() CollectedClientData
+	AttestationObject() AttestationObject
+}
+
+func (a registrationCelemonyVerifier) AuthenticatorData() AuthenticatorData {
+	return a.authenticatorData
+}
+
+func (a registrationCelemonyVerifier) Response() AuthenticatorAttestationResponse {
+	return a.response
+}
+
+func (a registrationCelemonyVerifier) ClientDataJSON() CollectedClientData {
+	return a.clientDataJSON
+}
+
+func (a registrationCelemonyVerifier) AttestationObject() AttestationObject {
+	return a.attestationObject
 }
 
 func (a AuthenticatorAttestationResponseJSON) Parse() (*AuthenticatorAttestationResponse, error) {
@@ -87,19 +106,19 @@ func (a AuthenticatorAttestationResponseJSON) Parse() (*AuthenticatorAttestation
 	}, nil
 }
 
-func (a *authenticatorAttestationResponseVerifier) IsValidCelemony() bool {
+func (a *registrationCelemonyVerifier) VerifyCelemony() bool {
 	return a.clientDataJSON.IsRegistrationCelemoney()
 }
 
-func (a *authenticatorAttestationResponseVerifier) VerifyChallenge(challenge []byte) (bool, error) {
+func (a *registrationCelemonyVerifier) VerifyChallenge(challenge []byte) (bool, error) {
 	return a.clientDataJSON.VerifyChallenge(challenge)
 }
 
-func (a *authenticatorAttestationResponseVerifier) VerifyOrigin(rpOrigins, rpSubFrameOrigins []string) (bool, error) {
+func (a *registrationCelemonyVerifier) VerifyOrigin(rpOrigins, rpSubFrameOrigins []string) (bool, error) {
 	return a.clientDataJSON.IsValidOrigin(rpOrigins, rpSubFrameOrigins)
 }
 
-func (a *authenticatorAttestationResponseVerifier) VerifyAuthenticatorData(rpID string, userVerification UserVerification) (bool, error) {
+func (a *registrationCelemonyVerifier) VerifyAuthenticatorData(rpID string, userVerification UserVerification) (bool, error) {
 	// Step 11. Let hash be the result of computing a hash over response.clientDataJSON using SHA-256.
 	sum := sha256.Sum256(a.response.ClientDataJSON)
 	hash := sum[:]
@@ -178,24 +197,28 @@ func (a *authenticatorAttestationResponseVerifier) VerifyAuthenticatorData(rpID 
 	return true, nil
 }
 
-func (a authenticatorAttestationResponseVerifier) AuthenticatorData() AuthenticatorData {
-	return *a.authenticatorData
-}
+func NewRegistrationCelemonyVerifier(registrationResponse RegistrationResponseJSON) (RegistrationCelemonyVerifier, error) {
+	// Step 3. Let response be credential.response.
+	// If response is not an instance of AuthenticatorAttestationResponse,
+	// abort the ceremony with a user-visible error.
+	response, err := registrationResponse.Response.Parse()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
 
-func NewAuthenticatorAttestationResponseVerifeir(response *AuthenticatorAttestationResponse) (AuthenticatorAttestationResponseVerifier, error) {
 	c := response.GetParsedClientDataJSON()
 
 	// Step 12. Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure to obtain the attestation statement format fmt, the authenticator data authData, and the attestation statement attStmt.
 	attestationObject := response.AttestationObject
-	authenticatorData := &AuthenticatorData{}
+	authenticatorData := AuthenticatorData{}
 	if err := authenticatorData.Unmarshal(attestationObject.AuthData); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal authenticator data: %w", err)
 	}
 
-	return &authenticatorAttestationResponseVerifier{
-		response:          response,
-		clientDataJSON:    &c,
-		attestationObject: &attestationObject,
+	return &registrationCelemonyVerifier{
+		response:          *response,
+		clientDataJSON:    c,
+		attestationObject: attestationObject,
 		authenticatorData: authenticatorData,
 	}, nil
 }

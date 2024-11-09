@@ -16,7 +16,7 @@ func TestRelyingParty_CreateOptionsForRegistrationCelemony(t *testing.T) {
 	rpConfig := &webauthn.RPConfig{
 		ID:              "example.com",
 		Name:            "Example",
-		Origin:          "https://example.com",
+		Origins:         []string{"https://example.com"},
 		SubFrameOrigins: []string{},
 	}
 
@@ -35,7 +35,7 @@ func TestRelyingParty_CreateOptionsForRegistrationCelemony(t *testing.T) {
 	assert.Equal(t, user.Name, creationOptions.User.Name)
 	assert.Equal(t, user.DisplayName, creationOptions.User.DisplayName)
 
-	assert.Equal(t, rpConfig.Origin, session.RPID)
+	assert.Equal(t, rpConfig.ID, session.RPID)
 	assert.Equal(t, session.Challenge, creationOptions.Challenge.String())
 	assert.GreaterOrEqual(t, len(session.Challenge), 16)
 
@@ -82,7 +82,7 @@ func TestRelyingParty_CreateCredential(t *testing.T) {
 	rpConfig := &webauthn.RPConfig{
 		ID:              "example.com",
 		Name:            "Example",
-		Origin:          "https://example.com",
+		Origins:         []string{"https://example.com"},
 		SubFrameOrigins: []string{},
 	}
 
@@ -126,7 +126,7 @@ func TestRelyingParty_CreateCredential(t *testing.T) {
 			credential: &webauthn.RegistrationResponseJSON{
 				ID: "123456789",
 				Response: webauthn.AuthenticatorAttestationResponseJSON{
-					ClientDataJSON: generateClientDataJSON(t, rpConfig.Origin, "invalid challenge"),
+					ClientDataJSON: generateClientDataJSON(t, rpConfig.Origins[0], "invalid challenge"),
 				},
 			},
 			err: fmt.Errorf("challenge mismatch"),
