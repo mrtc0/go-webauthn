@@ -23,6 +23,8 @@ const (
 
 type PublicKeyData interface {
 	Verify(data []byte, signature []byte) (bool, error)
+	GetKeyType() int64
+	GetAlgorithm() int64
 }
 
 // publicKeyData represents a COSE_Key object
@@ -83,4 +85,12 @@ func (p *EC2PublicKeyData) Verify(data []byte, signature []byte) (bool, error) {
 	}
 
 	return ecdsa.VerifyASN1(pubKey, h.Sum(nil), signature), nil
+}
+
+func (p *EC2PublicKeyData) GetKeyType() int64 {
+	return p.publicKeyData.KeyType
+}
+
+func (p *EC2PublicKeyData) GetAlgorithm() int64 {
+	return p.publicKeyData.Algorithm
 }
