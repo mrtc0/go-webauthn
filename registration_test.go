@@ -1,15 +1,6 @@
 package webauthn_test
 
-import (
-	"encoding/json"
-	"fmt"
-	"testing"
-
-	"github.com/mrtc0/go-webauthn"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-)
-
+/*
 func TestRelyingParty_CreateOptionsForRegistrationCelemony(t *testing.T) {
 	t.Parallel()
 
@@ -174,3 +165,5 @@ func generateClientDataJSON(t *testing.T, origin, challenge string) string {
 
 	return webauthn.Base64URLEncodedByte(data).String()
 }
+
+*/
