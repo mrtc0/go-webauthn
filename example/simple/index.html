@@ -104,24 +104,37 @@
         currentUser();
     </script>
 
+    <h1>Passkeys registration and SignIn example</h1>
+
     <p>Current User: <span id="currentUser"></span></p>
 
     <hr>
 
-    <h1>Signup</h1>
+    <h4>Signup</h4>
+    <p>1. Signup with email and password</p>
     <input type="email" name="email" id="signup-email" placeholder="Email">
     <input type="password" name="password" id="signup-password" placeholder="Password">
     <button onclick="signup()">Signup with Password</button>
 
     <hr>
 
-    <h4>Login with Password</h4>
+    <h4>SignIn with Password</h4>
+    <p>2. SignIn with email and password</p>
     <input type="email" name="email" id="email" placeholder="Email">
     <input type="password" name="password" id="password" placeholder="Password">
     <button onclick="passwordLogin()">Login with Password</button>
 
     <hr>
+
+    <h4>Registration Passkeys</h4>
+    <p>3. Registration Passkeys</p>
     <button onclick="passkeyRegistration()">Register Passkey</button>
+
+    <hr>
+
+    <h4>SignIn with Passkeys</h4>
+    <p>4. Logout</p>
+    <p>5. SignIn with Passkeys</p>
     <button onclick="passkeyLogin()">Login with Passkey</button>
 </body>
 
