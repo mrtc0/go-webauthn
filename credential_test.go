@@ -11,7 +11,7 @@ import (
 func TestCredentialRecord_GetPublicKey(t *testing.T) {
 	t.Parallel()
 
-	publicKey, err := webauthn.Base64URLEncodedByte([]byte("pQECAyYgASFYIDWHNBRkxpeaKyko7ZTkLvlrfi6TjOCqf7Ctfv2kv9AUIlggHyeS4DL4Mks6vQ1ljWUkaQt9oH03wB0u5qWT4cg1xms")).Decode()
+	publicKey, err := webauthn.Base64URLEncodedByte([]byte(testDataCredentialPublicKey)).Decode()
 	require.NoError(t, err)
 
 	credentialRecord := &webauthn.CredentialRecord{
