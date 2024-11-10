@@ -18,7 +18,7 @@ func WithAttestaion(attestation AttestationConveyancePreference) AuthenticationC
 	}
 }
 
-func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(sessionID []byte, opts ...AuthenticationCeremonyOption) (*PublicKeyCredentialRequestOptions, *Session, error) {
+func CreateAuthenticationOptions(rpConfig RPConfig, sessionID []byte, opts ...AuthenticationCeremonyOption) (*PublicKeyCredentialRequestOptions, *Session, error) {
 	challenge, err := GenerateChallenge()
 	if err != nil {
 		return nil, nil, err
@@ -26,7 +26,7 @@ func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(sessionID []byte,
 
 	credentialRequestOptions := &PublicKeyCredentialRequestOptions{
 		Challenge:        challenge,
-		RPID:             rp.RPConfig.ID,
+		RPID:             rpConfig.ID,
 		UserVerification: UserVerificationPreferred,
 		Timeout:          defaultTimeout,
 		Attestation:      AttestationConveyancePreferenceNone,
@@ -42,7 +42,7 @@ func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(sessionID []byte,
 
 	// TODO: Set AllowedCredentials
 	session, err := NewWebAuthnSession(
-		sessionID, challenge, rp.RPConfig.ID, credentialRequestOptions.UserVerification, nil,
+		sessionID, challenge, rpConfig.ID, credentialRequestOptions.UserVerification, nil,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -51,62 +51,35 @@ func (rp *RelyingParty) CreateOptionsForAuthenticationCeremony(sessionID []byte,
 	return credentialRequestOptions, session, nil
 }
 
-type DiscoveryUserHandler func(credentialRawID []byte, userHandle string) (*WebAuthnUser, *CredentialRecord, error)
+type AuthenticationCelemonyVerifierFunc func(
+	responseJSON AuthenticationResponseJSON,
+	allowedCredentials []PublicKeyCredentialDescriptor,
+	discoveryUserHandler DiscoveryUserHandler,
+	opts ...AuthenticatorAssertionResponseVerifierOption,
+) (AuthenticationCelemonyVerifier, error)
 
-// AuthenticationWithDiscoverableCredential is the ceremony for authenticating a user with a discoverable credential.
-func (rp *RelyingParty) AuthenticationWithDiscoverableCredential(handler DiscoveryUserHandler, session *Session, credential *AuthenticationResponseJSON) (*WebAuthnUser, *CredentialRecord, error) {
-	// Step 3. Let response be credential.response.
-	// If response is not an instance of AuthenticatorAssertionResponse,
-	// abort the ceremony with a user-visible error.
-	authenticatorAssertionResponse, err := credential.Response.Parse()
+type VerifyDiscoverableCredentialAuthenticationParam struct {
+	RPConfig           RPConfig
+	Challenge          []byte
+	AllowedCredentials []PublicKeyCredentialDescriptor
+	UserVerification   UserVerification
+}
+
+func VerifyDiscoverableCredentialAuthenticationResponse(
+	param VerifyDiscoverableCredentialAuthenticationParam,
+	handler DiscoveryUserHandler,
+	response AuthenticationResponseJSON,
+	verifierFunc AuthenticationCelemonyVerifierFunc,
+	opts ...AuthenticatorAssertionResponseVerifierOption,
+) (*WebAuthnUser, *CredentialRecord, error) {
+	if verifierFunc == nil {
+		verifierFunc = NewAuthenticationCelemonyVerifier
+	}
+
+	verifier, err := verifierFunc(response, param.AllowedCredentials, handler, opts...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse response: %w", err)
+		return nil, nil, fmt.Errorf("failed to create attestation response verifier: %w", err)
 	}
-
-	// TODO: Step 4. Let clientExtensionResults be the result of calling credential.getClientExtensionResults().
-
-	// Step 5. If options.allowCredentials is not empty,
-	// verify that credential.id identifies one of the public key credentials listed in
-	// options.allowCredentials.
-	if len(session.AllowedCredentials) > 0 {
-		found := false
-		for _, allowedCredential := range session.AllowedCredentials {
-			if SecureCompareByte(allowedCredential.ID, []byte(credential.ID)) {
-				found = true
-				break
-			}
-		}
-
-		if !found {
-			return nil, nil, fmt.Errorf("allowed credentials not found in session")
-		}
-	}
-
-	// Step 6. Identify the user being authenticated and let credentialRecord be
-	// the credential record for the credential:
-	// If the user was identified before the authentication ceremony was initiated,
-	// e.g., via a username or cookie, verify that the identified user account contains a credential record
-	// whose id equals credential.rawId. Let credentialRecord be that credential record.
-	// If response.userHandle is present, verify that it equals the user handle of the user account.
-	// If the user was not identified before the authentication ceremony was initiated,
-	// verify that response.userHandle is present. Verify that the user account identified
-	// by response.userHandle contains a credential record whose id equals credential.rawId.
-	// Let credentialRecord be that credential record.
-	if authenticatorAssertionResponse.UserHandle == "" {
-		return nil, nil, fmt.Errorf("user handle is not present")
-	}
-
-	decodedCredentialID, err := Base64URLEncodedByte(credential.RawID).Decode()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to decode credential rawID: %w", err)
-	}
-
-	user, credentialRecord, err := handler(decodedCredentialID, authenticatorAssertionResponse.UserHandle)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get user: %w", err)
-	}
-
-	verifier := NewAuthenticatorAssertionResponseVerifier(authenticatorAssertionResponse, credentialRecord)
 
 	// Step 10. Verify that the value of C.type is the string webauthn.get.
 	if !verifier.IsAuthenticationCeremony() {
@@ -114,18 +87,18 @@ func (rp *RelyingParty) AuthenticationWithDiscoverableCredential(handler Discove
 	}
 
 	// Step 11. Verify that the value of C.challenge equals the base64url encoding of options.challenge.
-	if result, err := verifier.VerifyChallenge(session.Challenge); !result {
+	if result, err := verifier.VerifyChallenge(param.Challenge); !result {
 		return nil, nil, fmt.Errorf("failed to verify challenge: %w", err)
 	}
 
 	// Step 12. Verify that the value of C.origin is an origin expected by the Relying Party.
 	// See § 13.4.9 Validating the origin of a credential for guidance.
-	if valid, err := verifier.VerifyOrigin(rp.RPConfig.Origins, rp.RPConfig.SubFrameOrigins); !valid {
+	if valid, err := verifier.VerifyOrigin(param.RPConfig.Origins, param.RPConfig.SubFrameOrigins); !valid {
 		return nil, nil, fmt.Errorf("failed to validate origin: %w", err)
 	}
 
 	// Step 14. Verify that the rpIdHash in authData is the SHA-256 hash of the RP ID expected by the Relying Party.
-	if !verifier.VerifyRPID(rp.RPConfig.ID) {
+	if !verifier.VerifyRPID(param.RPConfig.ID) {
 		return nil, nil, fmt.Errorf("RP ID mismatch")
 	}
 
@@ -136,7 +109,7 @@ func (rp *RelyingParty) AuthenticationWithDiscoverableCredential(handler Discove
 
 	// Step 16. Determine whether user verification is required for this assertion.
 	// User verification SHOULD be required if, and only if, options.userVerification is set to required.
-	if !verifier.VerifyUserVerified(session.UserVerification) {
+	if !verifier.VerifyUserVerified(param.UserVerification) {
 		return nil, nil, fmt.Errorf("user verification failed")
 	}
 
@@ -154,7 +127,7 @@ func (rp *RelyingParty) AuthenticationWithDiscoverableCredential(handler Discove
 
 	// Step 22. If authData.signCount is nonzero or credentialRecord.signCount is nonzero,
 	// then run the following sub-step:
-	if result, err := verifier.EvaluateSignCount(); !result {
+	if result, err := verifier.VerifySignCount(); !result {
 		fmt.Printf("failed to evaluate sign count: %s\n", err)
 		// return nil, nil, fmt.Errorf("failed to evaluate sign count: %w", err)
 	}
@@ -167,7 +140,10 @@ func (rp *RelyingParty) AuthenticationWithDiscoverableCredential(handler Discove
 	}
 
 	// Step 24. Update credentialRecord with new state values:
-	credentialRecord.UpdateState(authenticatorAssertionResponse)
+	user := verifier.GetUser()
+	credential := verifier.GetUserCredential()
+	authenticatorAssertionResponse := verifier.GetAuthenticatorAssertionResponse()
+	credential.UpdateState(&authenticatorAssertionResponse)
 
-	return user, credentialRecord, nil
+	return &user, &credential, nil
 }
