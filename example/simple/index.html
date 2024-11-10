@@ -1,22 +1,73 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
-    <script src="https://unpkg.com/@simplewebauthn/browser@11.0.0/dist/bundle/index.umd.min.js" integrity="sha384-MEoU+35r/Mcpi7hzGCSKXkm+Yu7nRyDqV8z+GjTNBhxzV/JrQXe88JTG1ol0+F1e" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/@simplewebauthn/browser@11.0.0/dist/bundle/index.umd.min.js"
+        integrity="sha384-MEoU+35r/Mcpi7hzGCSKXkm+Yu7nRyDqV8z+GjTNBhxzV/JrQXe88JTG1ol0+F1e"
+        crossorigin="anonymous"></script>
 </head>
+
 <body>
-   <script>
-        const registration = async () => {
-            const data = await fetch('/webauthn/registration/start');
+    <script>
+        const currentUser = async () => {
+            try {
+                const data = await fetch('/api/user');
+                const user = await data.json();
+                console.log(user)
+
+                document.getElementById('currentUser').innerText = user.email;
+            } catch (error) {
+                document.getElementById('currentUser').innerText = 'No logged in';
+            }
+        }
+
+        const passwordLogin = async () => {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            const data = await fetch('/api/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, password })
+            });
+
+            const user = await data.json();
+            console.log(user)
+            currentUser();
+
+            alert('Login success');
+        }
+
+        const signup = async () => {
+            const email = document.getElementById('signup-email').value;
+            const password = document.getElementById('signup-password').value;
+
+            const data = await fetch('/api/signup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, password })
+            });
+
+            const user = await data.json();
+            alert('Signup success');
+        }
+
+        const passkeyRegistration = async () => {
+            const data = await fetch('/api/user/passkey/registration/start');
             const optionsJSON = await data.json();
             console.log(optionsJSON)
 
             const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON })
             console.log(attResp)
 
-            const verificationResp = await fetch('/webauthn/registration/finish', {
+            const verificationResp = await fetch('/api/user/passkey/registration', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -26,10 +77,11 @@
 
             const verificationJSON = await verificationResp.json();
             console.log(verificationJSON)
+            alert('Passkey registration success');
         }
 
-        const login = async () => {
-            const data = await fetch('/webauthn/login/start');
+        const passkeyLogin = async () => {
+            const data = await fetch('/api/login/passkey/start');
             const optionsJSON = await data.json();
 
             console.log(optionsJSON)
@@ -37,17 +89,40 @@
             const asseResp = await SimpleWebAuthnBrowser.startAuthentication({ optionsJSON })
             console.log(asseResp)
 
-            const verificationResp = await fetch('/webauthn/login/finish', {
+            const verificationResp = await fetch('/api/login/passkey', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(asseResp)
             })
-        }
-   </script> 
 
-   <input type="button" value="Register" onclick="registration()">
-   <input type="button" value="Login" onclick="login()">
+            currentUser();
+            alert('Passkey login success');
+        }
+
+        currentUser();
+    </script>
+
+    <p>Current User: <span id="currentUser"></span></p>
+
+    <hr>
+
+    <h1>Signup</h1>
+    <input type="email" name="email" id="signup-email" placeholder="Email">
+    <input type="password" name="password" id="signup-password" placeholder="Password">
+    <button onclick="signup()">Signup with Password</button>
+
+    <hr>
+
+    <h4>Login with Password</h4>
+    <input type="email" name="email" id="email" placeholder="Email">
+    <input type="password" name="password" id="password" placeholder="Password">
+    <button onclick="passwordLogin()">Login with Password</button>
+
+    <hr>
+    <button onclick="passkeyRegistration()">Register Passkey</button>
+    <button onclick="passkeyLogin()">Login with Passkey</button>
 </body>
+
 </html>
