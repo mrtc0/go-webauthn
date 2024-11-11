@@ -91,25 +91,28 @@ func TestCreateRegistrationCelemonyOptions(t *testing.T) {
 	})
 }
 
-/*
 func TestVerifyRegistrationCelemonyResponse(t *testing.T) {
 	t.Parallel()
 
 	rpConfig := &webauthn.RPConfig{
-		ID:              "example.com",
-		Name:            "Example",
-		Origins:         []string{"https://example.com"},
+		ID:              "www.passkeys-debugger.io",
+		Name:            "Relying Party Name",
+		Origins:         []string{"https://www.passkeys-debugger.io"},
 		SubFrameOrigins: []string{},
 	}
 
 	user := &webauthn.WebAuthnUser{
-		ID:          []byte("123456789"),
-		Name:        "morita",
-		DisplayName: "Kohei Morita",
+		ID:          []byte("nBhwlkrGyS_mazQe4dtUlIH9-sI6EMX8ZWQdgDea35I"),
+		Name:        "test",
+		DisplayName: "test",
 	}
 
 	_, session, err := webauthn.CreateRegistrationCeremonyOptions(*rpConfig, *user)
 	require.NoError(t, err)
+	challenge := []byte("-YgBwopmabC7WKA1CvN5aF0jMF97iXIAUhZbVFpKjCQ")
+	c, err := webauthn.Base64URLEncodedByte(challenge).Decode()
+	require.NoError(t, err)
+	session.Challenge = c
 
 	registrationResponse := webauthn.RegistrationResponseJSON{
 		ID:                     "a4Pn9v5WclTg5oofzTO5Q8IxyPof3cAZ0-zjC9PM7dE",
@@ -129,4 +132,3 @@ func TestVerifyRegistrationCelemonyResponse(t *testing.T) {
 	_, err = webauthn.VerifyRegistrationCelemonyResponse(*rpConfig, *session, registrationResponse, nil)
 	assert.NoError(t, err)
 }
-*/
