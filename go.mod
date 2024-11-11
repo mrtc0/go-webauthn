@@ -4,6 +4,7 @@ go 1.22.5
 
 require (
 	github.com/fxamacker/cbor/v2 v2.7.0
+	github.com/google/go-cmp v0.6.0
 	github.com/stretchr/testify v1.9.0
 )
 

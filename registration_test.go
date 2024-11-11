@@ -1,7 +1,16 @@
 package webauthn_test
 
-/*
-func TestRelyingParty_CreateOptionsForRegistrationCelemony(t *testing.T) {
+import (
+	"testing"
+
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/mrtc0/go-webauthn"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestCreateRegistrationCelemonyOptions(t *testing.T) {
 	t.Parallel()
 
 	rpConfig := &webauthn.RPConfig{
@@ -16,122 +25,38 @@ func TestRelyingParty_CreateOptionsForRegistrationCelemony(t *testing.T) {
 		Name:        "morita",
 		DisplayName: "Kohei Morita",
 	}
-
-	creationOptions, session, err := webauthn.NewRelyingParty(rpConfig).CreateOptionsForRegistrationCeremony(user)
-	assert.NoError(t, err)
-
-	assert.Equal(t, rpConfig.ID, creationOptions.RP.ID)
-	assert.Equal(t, rpConfig.Name, creationOptions.RP.Name)
-	assert.Equal(t, user.ID, creationOptions.User.ID)
-	assert.Equal(t, user.Name, creationOptions.User.Name)
-	assert.Equal(t, user.DisplayName, creationOptions.User.DisplayName)
-
-	assert.Equal(t, rpConfig.ID, session.RPID)
-	assert.Equal(t, session.Challenge, creationOptions.Challenge.String())
-	assert.GreaterOrEqual(t, len(session.Challenge), 16)
-
-	t.Run("with options", func(t *testing.T) {
-		testCases := map[string]struct {
-			opt        webauthn.RegistrationCeremonyOption
-			expectFunc func(t *testing.T, creationOptions *webauthn.PublicKeyCredentialCreationOptions)
-		}{
-			"WithAuthenticatorSelection": {
-				opt: webauthn.WithAuthenticatorSelection(
-					webauthn.AuthenticatorSelectionCriteria{
-						AuthenticatorAttachment: "platform",
-						ResidentKey:             "preferred",
-						RequireResidentKey:      true,
-						UserVerification:        "required",
-					},
-				),
-				expectFunc: func(t *testing.T, creationOptions *webauthn.PublicKeyCredentialCreationOptions) {
-					assert.Equal(t, "platform", creationOptions.AuthenticatorSelection.AuthenticatorAttachment)
-					assert.Equal(t, "preferred", creationOptions.AuthenticatorSelection.ResidentKey)
-					assert.True(t, creationOptions.AuthenticatorSelection.RequireResidentKey)
-					assert.Equal(t, "required", creationOptions.AuthenticatorSelection.UserVerification)
-				},
-			},
-		}
-
-		for name, tc := range testCases {
-			tc := tc
-			t.Run(name, func(t *testing.T) {
-				t.Parallel()
-
-				rp := webauthn.NewRelyingParty(rpConfig)
-				creationOptions, _, err := rp.CreateOptionsForRegistrationCeremony(user, tc.opt)
-				assert.NoError(t, err)
-				tc.expectFunc(t, creationOptions)
-			})
-		}
-	})
-}
-
-func TestRelyingParty_CreateCredential(t *testing.T) {
-	t.Parallel()
-
-	rpConfig := &webauthn.RPConfig{
-		ID:              "example.com",
-		Name:            "Example",
-		Origins:         []string{"https://example.com"},
-		SubFrameOrigins: []string{},
-	}
-
-	user := &webauthn.WebAuthnUser{
-		ID:          []byte("123456789"),
-		Name:        "morita",
-		DisplayName: "Kohei Morita",
-	}
-
-	rp := webauthn.NewRelyingParty(rpConfig)
-	_, session, err := rp.CreateOptionsForRegistrationCeremony(user)
-	require.NoError(t, err)
 
 	testCases := map[string]struct {
-		user       *webauthn.WebAuthnUser
-		session    *webauthn.Session
-		credential *webauthn.RegistrationResponseJSON
-		err        error
+		opts   webauthn.RegistrationCeremonyOption
+		expect webauthn.PublicKeyCredentialCreationOptions
 	}{
-		"NG: mismatch user": {
-			user: &webauthn.WebAuthnUser{
-				ID:          []byte("987654321"),
-				Name:        "morita",
-				DisplayName: "Kohei Morita",
-			},
-			session:    session,
-			credential: nil,
-			err:        fmt.Errorf("mismatch UserID"),
-		},
-		"NG: invalid credential response": {
-			user:    user,
-			session: session,
-			credential: &webauthn.RegistrationResponseJSON{
-				Response: webauthn.AuthenticatorAttestationResponseJSON{},
-			},
-			err: fmt.Errorf("failed to parse client data JSON"),
-		},
-		"NG: mismatch challenge": {
-			user:    user,
-			session: session,
-			credential: &webauthn.RegistrationResponseJSON{
-				ID: "123456789",
-				Response: webauthn.AuthenticatorAttestationResponseJSON{
-					ClientDataJSON: generateClientDataJSON(t, rpConfig.Origins[0], "invalid challenge"),
+		"WithAuthenticatorSelection": {
+			opts: webauthn.WithAuthenticatorSelection(
+				webauthn.AuthenticatorSelectionCriteria{
+					ResidentKey:        "required",
+					RequireResidentKey: true,
+					UserVerification:   webauthn.UserVerificationRequired,
 				},
-			},
-			err: fmt.Errorf("challenge mismatch"),
-		},
-		"NG: mismatch origin": {
-			user:    user,
-			session: session,
-			credential: &webauthn.RegistrationResponseJSON{
-				ID: "123456789",
-				Response: webauthn.AuthenticatorAttestationResponseJSON{
-					ClientDataJSON: generateClientDataJSON(t, "https://invalid.com", string(session.Challenge)),
+			),
+			expect: webauthn.PublicKeyCredentialCreationOptions{
+				AuthenticatorSelection: webauthn.AuthenticatorSelectionCriteria{
+					ResidentKey:        "required",
+					RequireResidentKey: true,
+					UserVerification:   webauthn.UserVerificationRequired,
 				},
+				Attestation: webauthn.AttestationConveyancePreferenceNone,
 			},
-			err: fmt.Errorf("origin mismatch"),
+		},
+		"WithAttestationPreference": {
+			opts: webauthn.WithAttestationPreference(webauthn.AttestationConveyancePreferenceDirect),
+			expect: webauthn.PublicKeyCredentialCreationOptions{
+				AuthenticatorSelection: webauthn.AuthenticatorSelectionCriteria{
+					ResidentKey:        "required",
+					RequireResidentKey: true,
+					UserVerification:   webauthn.UserVerificationPreferred,
+				},
+				Attestation: webauthn.AttestationConveyancePreferenceDirect,
+			},
 		},
 	}
 
@@ -140,30 +65,68 @@ func TestRelyingParty_CreateCredential(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := rp.CreateCredential(tc.session, tc.credential)
-			if tc.err != nil {
-				assert.ErrorContains(t, err, tc.err.Error())
-				return
-			}
+			creationOptions, _, err := webauthn.CreateRegistrationCeremonyOptions(*rpConfig, *user, tc.opts)
+			require.NoError(t, err)
 
-			assert.NoError(t, err)
+			opt := cmpopts.IgnoreFields(
+				webauthn.PublicKeyCredentialCreationOptions{},
+				"RP", "User", "Challenge", "PubKeyCredParams", "Timeout", "ExcludeCredentials",
+			)
+
+			if diff := cmp.Diff(tc.expect, *creationOptions, opt); diff != "" {
+				t.Errorf("(-got, +want)\n%s", diff)
+			}
 		})
 	}
+
+	t.Run("Test session values", func(t *testing.T) {
+		t.Parallel()
+
+		creationOptions, session, err := webauthn.CreateRegistrationCeremonyOptions(*rpConfig, *user)
+		require.NoError(t, err)
+
+		assert.Equal(t, creationOptions.User.ID, session.ID)
+		assert.Equal(t, rpConfig.ID, session.RPID)
+		assert.Equal(t, creationOptions.Challenge, webauthn.Base64URLEncodedByte(session.Challenge))
+	})
 }
 
-func generateClientDataJSON(t *testing.T, origin, challenge string) string {
-	t.Helper()
+/*
+func TestVerifyRegistrationCelemonyResponse(t *testing.T) {
+	t.Parallel()
 
-	clientDataJson := &webauthn.CollectedClientData{
-		Type:      "webauthn.create",
-		Challenge: challenge,
-		Origin:    origin,
+	rpConfig := &webauthn.RPConfig{
+		ID:              "example.com",
+		Name:            "Example",
+		Origins:         []string{"https://example.com"},
+		SubFrameOrigins: []string{},
 	}
 
-	data, err := json.Marshal(clientDataJson)
+	user := &webauthn.WebAuthnUser{
+		ID:          []byte("123456789"),
+		Name:        "morita",
+		DisplayName: "Kohei Morita",
+	}
+
+	_, session, err := webauthn.CreateRegistrationCeremonyOptions(*rpConfig, *user)
 	require.NoError(t, err)
 
-	return webauthn.Base64URLEncodedByte(data).String()
-}
+	registrationResponse := webauthn.RegistrationResponseJSON{
+		ID:                     "a4Pn9v5WclTg5oofzTO5Q8IxyPof3cAZ0-zjC9PM7dE",
+		RawID:                  "a4Pn9v5WclTg5oofzTO5Q8IxyPof3cAZ0-zjC9PM7dE",
+		Type:                   "public-key",
+		ClientExtensionResults: webauthn.AuthenticationExtensionsClientOutputsJSON{},
+		Response: webauthn.AuthenticatorAttestationResponseJSON{
+			AttestationObject:  "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVikPpZrl-Wqt-OFfBpyy2SraN1m7LT0GZORwGA7-6ujYkNFAAAAAK3OAAI1vMYKZIsLJfHwVQMAIGuD5_b-VnJU4OaKH80zuUPCMcj6H93AGdPs4wvTzO3RpQECAyYgASFYIDWHNBRkxpeaKyko7ZTkLvlrfi6TjOCqf7Ctfv2kv9AUIlggHyeS4DL4Mks6vQ1ljWUkaQt9oH03wB0u5qWT4cg1xms",
+			ClientDataJSON:     "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiLVlnQndvcG1hYkM3V0tBMUN2TjVhRjBqTUY5N2lYSUFVaFpiVkZwS2pDUSIsIm9yaWdpbiI6Imh0dHBzOi8vd3d3LnBhc3NrZXlzLWRlYnVnZ2VyLmlvIiwiY3Jvc3NPcmlnaW4iOmZhbHNlfQ",
+			Transports:         []string{"internal"},
+			AuthenticatorData:  "PpZrl-Wqt-OFfBpyy2SraN1m7LT0GZORwGA7-6ujYkNFAAAAAK3OAAI1vMYKZIsLJfHwVQMAIGuD5_b-VnJU4OaKH80zuUPCMcj6H93AGdPs4wvTzO3RpQECAyYgASFYIDWHNBRkxpeaKyko7ZTkLvlrfi6TjOCqf7Ctfv2kv9AUIlggHyeS4DL4Mks6vQ1ljWUkaQt9oH03wB0u5qWT4cg1xms",
+			PublicKey:          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAENYc0FGTGl5orKSjtlOQu-Wt-LpOM4Kp_sK1-_aS_0BQfJ5LgMvgySzq9DWWNZSRpC32gfTfAHS7mpZPhyDXGaw",
+			PublicKeyAlgorithm: -7,
+		},
+	}
 
+	_, err = webauthn.VerifyRegistrationCelemonyResponse(*rpConfig, *session, registrationResponse, nil)
+	assert.NoError(t, err)
+}
 */
