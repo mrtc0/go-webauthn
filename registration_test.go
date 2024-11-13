@@ -6,6 +6,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/mrtc0/go-webauthn"
+	"github.com/mrtc0/go-webauthn/testutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -95,9 +96,9 @@ func TestVerifyRegistrationCelemonyResponse(t *testing.T) {
 	t.Parallel()
 
 	rpConfig := &webauthn.RPConfig{
-		ID:              "www.passkeys-debugger.io",
+		ID:              "example.com",
 		Name:            "Relying Party Name",
-		Origins:         []string{"https://www.passkeys-debugger.io"},
+		Origins:         []string{"https://example.com"},
 		SubFrameOrigins: []string{},
 	}
 
@@ -114,20 +115,28 @@ func TestVerifyRegistrationCelemonyResponse(t *testing.T) {
 	require.NoError(t, err)
 	session.Challenge = c
 
-	registrationResponse := webauthn.RegistrationResponseJSON{
-		ID:                     "a4Pn9v5WclTg5oofzTO5Q8IxyPof3cAZ0-zjC9PM7dE",
-		RawID:                  "a4Pn9v5WclTg5oofzTO5Q8IxyPof3cAZ0-zjC9PM7dE",
-		Type:                   "public-key",
-		ClientExtensionResults: webauthn.AuthenticationExtensionsClientOutputsJSON{},
-		Response: webauthn.AuthenticatorAttestationResponseJSON{
-			AttestationObject:  "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVikPpZrl-Wqt-OFfBpyy2SraN1m7LT0GZORwGA7-6ujYkNFAAAAAK3OAAI1vMYKZIsLJfHwVQMAIGuD5_b-VnJU4OaKH80zuUPCMcj6H93AGdPs4wvTzO3RpQECAyYgASFYIDWHNBRkxpeaKyko7ZTkLvlrfi6TjOCqf7Ctfv2kv9AUIlggHyeS4DL4Mks6vQ1ljWUkaQt9oH03wB0u5qWT4cg1xms",
-			ClientDataJSON:     "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiLVlnQndvcG1hYkM3V0tBMUN2TjVhRjBqTUY5N2lYSUFVaFpiVkZwS2pDUSIsIm9yaWdpbiI6Imh0dHBzOi8vd3d3LnBhc3NrZXlzLWRlYnVnZ2VyLmlvIiwiY3Jvc3NPcmlnaW4iOmZhbHNlfQ",
-			Transports:         []string{"internal"},
-			AuthenticatorData:  "PpZrl-Wqt-OFfBpyy2SraN1m7LT0GZORwGA7-6ujYkNFAAAAAK3OAAI1vMYKZIsLJfHwVQMAIGuD5_b-VnJU4OaKH80zuUPCMcj6H93AGdPs4wvTzO3RpQECAyYgASFYIDWHNBRkxpeaKyko7ZTkLvlrfi6TjOCqf7Ctfv2kv9AUIlggHyeS4DL4Mks6vQ1ljWUkaQt9oH03wB0u5qWT4cg1xms",
-			PublicKey:          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAENYc0FGTGl5orKSjtlOQu-Wt-LpOM4Kp_sK1-_aS_0BQfJ5LgMvgySzq9DWWNZSRpC32gfTfAHS7mpZPhyDXGaw",
-			PublicKeyAlgorithm: -7,
-		},
-	}
+	registrationResponse := testutils.NewRegistrationCelemonyResponse(
+		"example.com",
+		c,
+		webauthn.FlagUserPresent|webauthn.FlagUserVerified|webauthn.FlagAttestedCredentialData,
+	)
+
+	/*
+		registrationResponse := webauthn.RegistrationResponseJSON{
+			ID:                     "a4Pn9v5WclTg5oofzTO5Q8IxyPof3cAZ0-zjC9PM7dE",
+			RawID:                  "a4Pn9v5WclTg5oofzTO5Q8IxyPof3cAZ0-zjC9PM7dE",
+			Type:                   "public-key",
+			ClientExtensionResults: webauthn.AuthenticationExtensionsClientOutputsJSON{},
+			Response: webauthn.AuthenticatorAttestationResponseJSON{
+				AttestationObject:  "o2NmbXRkbm9uZWdhdHRTdG10oGhhdXRoRGF0YVikPpZrl-Wqt-OFfBpyy2SraN1m7LT0GZORwGA7-6ujYkNFAAAAAK3OAAI1vMYKZIsLJfHwVQMAIGuD5_b-VnJU4OaKH80zuUPCMcj6H93AGdPs4wvTzO3RpQECAyYgASFYIDWHNBRkxpeaKyko7ZTkLvlrfi6TjOCqf7Ctfv2kv9AUIlggHyeS4DL4Mks6vQ1ljWUkaQt9oH03wB0u5qWT4cg1xms",
+				ClientDataJSON:     "eyJ0eXBlIjoid2ViYXV0aG4uY3JlYXRlIiwiY2hhbGxlbmdlIjoiLVlnQndvcG1hYkM3V0tBMUN2TjVhRjBqTUY5N2lYSUFVaFpiVkZwS2pDUSIsIm9yaWdpbiI6Imh0dHBzOi8vd3d3LnBhc3NrZXlzLWRlYnVnZ2VyLmlvIiwiY3Jvc3NPcmlnaW4iOmZhbHNlfQ",
+				Transports:         []string{"internal"},
+				AuthenticatorData:  "PpZrl-Wqt-OFfBpyy2SraN1m7LT0GZORwGA7-6ujYkNFAAAAAK3OAAI1vMYKZIsLJfHwVQMAIGuD5_b-VnJU4OaKH80zuUPCMcj6H93AGdPs4wvTzO3RpQECAyYgASFYIDWHNBRkxpeaKyko7ZTkLvlrfi6TjOCqf7Ctfv2kv9AUIlggHyeS4DL4Mks6vQ1ljWUkaQt9oH03wB0u5qWT4cg1xms",
+				PublicKey:          "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAENYc0FGTGl5orKSjtlOQu-Wt-LpOM4Kp_sK1-_aS_0BQfJ5LgMvgySzq9DWWNZSRpC32gfTfAHS7mpZPhyDXGaw",
+				PublicKeyAlgorithm: -7,
+			},
+		}
+	*/
 
 	_, err = webauthn.VerifyRegistrationCelemonyResponse(*rpConfig, *session, registrationResponse, nil)
 	assert.NoError(t, err)

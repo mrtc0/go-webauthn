@@ -115,7 +115,7 @@ func (c *CredentialRecord) UpdateState(authenticatorAssertionResponse *Authentic
 
 // The credential public key encoded in COSE_Key format, using the CTAP2 canonical CBOR encoding form.
 func (r *CredentialRecord) GetPublicKey() (PublicKeyData, error) {
-	pk := &publicKeyData{}
+	pk := &PublicKeyDataBase{}
 
 	// ref. https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#ctap2-canonical-cbor-encoding-form
 	mode, err := cbor.DecOptions{

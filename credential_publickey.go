@@ -29,21 +29,21 @@ type PublicKeyData interface {
 
 // publicKeyData represents a COSE_Key object
 // https://datatracker.ietf.org/doc/html/rfc8152#section-13
-type publicKeyData struct {
+type PublicKeyDataBase struct {
 	// https://datatracker.ietf.org/doc/html/rfc8152#section-13
 	KeyType   int64 `cbor:"1,keyasint" json:"kty"` // required
 	Algorithm int64 `cbor:"3,keyasint" json:"alg"` // required
 }
 
 type OKPPublicKeyData struct {
-	publicKeyData publicKeyData
+	PublicKeyDataBase
 }
 
 // EC2PublicKeyData represents an Elliptic Curve public key
 // https://datatracker.ietf.org/doc/html/rfc8152#section-8.1
 // https://datatracker.ietf.org/doc/html/rfc8392#appendix-A.2.3
 type EC2PublicKeyData struct {
-	publicKeyData
+	PublicKeyDataBase
 
 	Curve       int64  `cbor:"-1,keyasint" json:"crv"`
 	XCoordinate []byte `cbor:"-2,keyasint" json:"x"`
@@ -88,9 +88,9 @@ func (p *EC2PublicKeyData) Verify(data []byte, signature []byte) (bool, error) {
 }
 
 func (p *EC2PublicKeyData) GetKeyType() int64 {
-	return p.publicKeyData.KeyType
+	return p.PublicKeyDataBase.KeyType
 }
 
 func (p *EC2PublicKeyData) GetAlgorithm() int64 {
-	return p.publicKeyData.Algorithm
+	return p.PublicKeyDataBase.Algorithm
 }
