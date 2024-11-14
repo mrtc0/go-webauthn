@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/mrtc0/go-webauthn"
@@ -16,10 +17,11 @@ func NewRegistrationCelemonyResponse(
 	rpID string,
 	challenge []byte,
 	flags webauthn.AuthenticatorFlags,
-) webauthn.RegistrationResponseJSON {
+	attestationFormat string,
+) (*webauthn.RegistrationResponseJSON, error) {
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	publicKey := privateKey.PublicKey
@@ -34,20 +36,20 @@ func NewRegistrationCelemonyResponse(
 	}
 	encodedPublicKey, err := cbor.Marshal(ec2PublicKeyData)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	authenticatorData := NewAuthenticatorData(rpID, flags, encodedPublicKey)
 
-	attestatioObject := webauthn.AttestationObject{
-		Format:       "none",
-		AuthData:     authenticatorData,
-		AttStatement: nil,
-	}
-
-	attestationObjectBytes, err := cbor.Marshal(attestatioObject)
-	if err != nil {
-		panic(err)
+	var attestationObjectBytes []byte
+	switch attestationFormat {
+	case "none":
+		attestationObjectBytes, err = NewAttestationObjectNone(authenticatorData)
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("unsupported attestation format: %s", attestationFormat)
 	}
 
 	clientDataJSON := webauthn.CollectedClientData{
@@ -58,10 +60,10 @@ func NewRegistrationCelemonyResponse(
 	}
 	clientDataJSONByte, err := json.Marshal(clientDataJSON)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return webauthn.RegistrationResponseJSON{
+	return &webauthn.RegistrationResponseJSON{
 		ID:                     webauthn.Base64URLEncodedByte([]byte("credential-id")).String(),
 		RawID:                  webauthn.Base64URLEncodedByte([]byte("credential-id")).String(),
 		Type:                   "public-key",
@@ -74,12 +76,23 @@ func NewRegistrationCelemonyResponse(
 			PublicKey:          webauthn.Base64URLEncodedByte(encodedPublicKey).String(),
 			PublicKeyAlgorithm: -7,
 		},
-	}
+	}, nil
 
 }
 
-func NewAttestationObjectNone() {
+func NewAttestationObjectNone(authenticatorData []byte) ([]byte, error) {
+	attestatioObject := webauthn.AttestationObject{
+		Format:       "none",
+		AuthData:     authenticatorData,
+		AttStatement: nil,
+	}
 
+	attestationObjectBytes, err := cbor.Marshal(attestatioObject)
+	if err != nil {
+		return nil, err
+	}
+
+	return attestationObjectBytes, nil
 }
 
 func NewAuthenticatorData(
