@@ -115,7 +115,8 @@ func TestVerifyRegistrationCelemonyResponse(t *testing.T) {
 	require.NoError(t, err)
 	session.Challenge = c
 
-	registrationResponse, err := testutils.NewRegistrationCelemonyResponse(
+	registrationResponse := testutils.NewRegistrationCelemonyResponse(
+		t,
 		"example.com",
 		c,
 		webauthn.FlagUserPresent|webauthn.FlagUserVerified|webauthn.FlagAttestedCredentialData,

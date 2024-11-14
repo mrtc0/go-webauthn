@@ -7,21 +7,24 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
+	"testing"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/mrtc0/go-webauthn"
 )
 
 func NewRegistrationCelemonyResponse(
+	t *testing.T,
 	rpID string,
 	challenge []byte,
 	flags webauthn.AuthenticatorFlags,
 	attestationFormat string,
-) (*webauthn.RegistrationResponseJSON, error) {
+) *webauthn.RegistrationResponseJSON {
+	t.Helper()
+
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return nil, err
+		t.Errorf("failed to generate key: %v", err)
 	}
 
 	publicKey := privateKey.PublicKey
@@ -36,20 +39,20 @@ func NewRegistrationCelemonyResponse(
 	}
 	encodedPublicKey, err := cbor.Marshal(ec2PublicKeyData)
 	if err != nil {
-		return nil, err
+		t.Errorf("failed to marshal public key: %v", err)
 	}
 
-	authenticatorData := NewAuthenticatorData(rpID, flags, encodedPublicKey)
+	authenticatorData := NewAuthenticatorData(t, rpID, flags, encodedPublicKey)
 
 	var attestationObjectBytes []byte
 	switch attestationFormat {
 	case "none":
-		attestationObjectBytes, err = NewAttestationObjectNone(authenticatorData)
+		attestationObjectBytes = NewAttestationObjectNone(t, authenticatorData)
 		if err != nil {
-			return nil, err
+			t.Errorf("failed to create attestation object: %v", err)
 		}
 	default:
-		return nil, fmt.Errorf("unsupported attestation format: %s", attestationFormat)
+		t.Errorf("unsupported attestation format: %s", attestationFormat)
 	}
 
 	clientDataJSON := webauthn.CollectedClientData{
@@ -60,7 +63,7 @@ func NewRegistrationCelemonyResponse(
 	}
 	clientDataJSONByte, err := json.Marshal(clientDataJSON)
 	if err != nil {
-		return nil, err
+		t.Errorf("failed to marshal client data: %v", err)
 	}
 
 	return &webauthn.RegistrationResponseJSON{
@@ -76,11 +79,13 @@ func NewRegistrationCelemonyResponse(
 			PublicKey:          webauthn.Base64URLEncodedByte(encodedPublicKey).String(),
 			PublicKeyAlgorithm: -7,
 		},
-	}, nil
+	}
 
 }
 
-func NewAttestationObjectNone(authenticatorData []byte) ([]byte, error) {
+func NewAttestationObjectNone(t *testing.T, authenticatorData []byte) []byte {
+	t.Helper()
+
 	attestatioObject := webauthn.AttestationObject{
 		Format:       "none",
 		AuthData:     authenticatorData,
@@ -89,17 +94,20 @@ func NewAttestationObjectNone(authenticatorData []byte) ([]byte, error) {
 
 	attestationObjectBytes, err := cbor.Marshal(attestatioObject)
 	if err != nil {
-		return nil, err
+		t.Errorf("failed to marshal attestation object: %v", err)
 	}
 
-	return attestationObjectBytes, nil
+	return attestationObjectBytes
 }
 
 func NewAuthenticatorData(
+	t *testing.T,
 	rpID string,
 	flags webauthn.AuthenticatorFlags,
 	publicKey []byte,
 ) []byte {
+	t.Helper()
+
 	var authenticatorData []byte
 
 	rpIDHash := sha256.Sum256([]byte(rpID))
@@ -115,7 +123,7 @@ func NewAuthenticatorData(
 	aaguid := make([]byte, 16)
 	_, err := rand.Read(aaguid)
 	if err != nil {
-		panic(err)
+		t.Errorf("failed to generate aaguid: %v", err)
 	}
 	authenticatorData = append(authenticatorData, aaguid...)
 
