@@ -112,7 +112,7 @@ func VerifyRegistrationCelemonyResponse(
 		return nil, fmt.Errorf("failed to validate RP ID: %w", err)
 	}
 
-	if valid, err := verifier.VerifAuthenticatorDataFlags(session.UserVerification); !valid {
+	if valid, err := verifier.VerifyAuthenticatorDataFlags(session.UserVerification); !valid {
 		return nil, fmt.Errorf("failed to validate authenticator data flags: %w", err)
 	}
 
