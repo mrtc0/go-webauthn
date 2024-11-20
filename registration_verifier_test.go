@@ -52,5 +52,63 @@ func TestRegistrationCelemonyVerifier_VerifyRPID(t *testing.T) {
 			}
 		})
 	}
+}
 
+func TestRegistrationCelemonyVerifier_VerifyAuthenticatorDataFlags(t *testing.T) {
+	t.Parallel()
+
+	testCases := map[string]struct {
+		userVerification   webauthn.UserVerification
+		authenticatorFlags webauthn.AuthenticatorFlags
+		expect             bool
+	}{
+		"NG: UserPresent flag is not set": {
+			userVerification:   webauthn.UserVerificationRequired,
+			authenticatorFlags: webauthn.FlagUserVerified | webauthn.FlagAttestedCredentialData,
+			expect:             false,
+		},
+		"NG: userVerification is required, but UserVerified flag is not set": {
+			userVerification:   webauthn.UserVerificationRequired,
+			authenticatorFlags: webauthn.FlagUserPresent | webauthn.FlagAttestedCredentialData,
+			expect:             false,
+		},
+		"NG: BackupEligible flag is not set, but BackupState flag is set": {
+			userVerification:   webauthn.UserVerificationRequired,
+			authenticatorFlags: webauthn.FlagUserPresent | webauthn.FlagUserVerified | webauthn.FlagAttestedCredentialData | webauthn.FlagBackupState,
+			expect:             false,
+		},
+		"OK: valid flags": {
+			userVerification:   webauthn.UserVerificationRequired,
+			authenticatorFlags: webauthn.FlagUserPresent | webauthn.FlagUserVerified | webauthn.FlagAttestedCredentialData | webauthn.FlagBackupEligible | webauthn.FlagBackupState,
+			expect:             true,
+		},
+	}
+
+	for name, tc := range testCases {
+		tc := tc
+
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			registrationResponse := testutils.NewRegistrationCelemonyResponse(
+				t,
+				"example.com",
+				[]byte("123456789"),
+				tc.authenticatorFlags,
+				"none",
+			)
+
+			verifier, err := webauthn.NewRegistrationCelemonyVerifier(*registrationResponse)
+			require.NoError(t, err)
+
+			actual, err := verifier.VerifyAuthenticatorDataFlags(tc.userVerification)
+			assert.Equal(t, tc.expect, actual)
+
+			if tc.expect {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
 }
