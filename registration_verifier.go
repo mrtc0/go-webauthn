@@ -10,7 +10,7 @@ type RegistrationCelemonyVerifier interface {
 	VerifyChallenge(challenge []byte) (bool, error)
 	VerifyOrigin(rpOrigins, rpSubFrameOrigins []string) (bool, error)
 	VerifyRPID(rpID string) (bool, error)
-	VerifAuthenticatorDataFlags(userVerification UserVerification) (bool, error)
+	VerifyAuthenticatorDataFlags(userVerification UserVerification) (bool, error)
 	VerifyPublicKeyAlgParams(params []PublicKeyCredentialParameters) (bool, error)
 	VerifyAttestationStatement() (bool, error)
 
@@ -60,7 +60,7 @@ func (a *registrationCelemonyVerifier) VerifyRPID(rpID string) (bool, error) {
 	return true, nil
 }
 
-func (a *registrationCelemonyVerifier) VerifAuthenticatorDataFlags(userVerification UserVerification) (bool, error) {
+func (a *registrationCelemonyVerifier) VerifyAuthenticatorDataFlags(userVerification UserVerification) (bool, error) {
 	// Step 14. Verify that the UP bit of the flags in authData is set.
 	if !a.authenticatorData.Flags.HasUserPresent() {
 		return false, fmt.Errorf("UP bit not set")
