@@ -3,12 +3,14 @@ package webauthn
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"fmt"
 	"math/big"
 )
 
 type COSEKeyType int
+type EllipticCurveKey int
 
 // https://www.iana.org/assignments/cose/cose.xhtml#key-type
 const (
@@ -19,6 +21,18 @@ const (
 	COSEKeyTypeSymmetric
 	COSEKeyTypeHSS_LMS
 	COSEKeyTypeWalnutDSA
+)
+
+// https://datatracker.ietf.org/doc/html/rfc8152#section-13.1
+const (
+	_ EllipticCurveKey = iota // ignore first value
+	EC2P256
+	EC2P384
+	EC2P521
+	OctetKeyPairX25519
+	OctetKeyPairX448
+	OctetKeyPairEd25519
+	OctetKeyPairEd448
 )
 
 type PublicKeyData interface {
@@ -35,8 +49,12 @@ type PublicKeyDataBase struct {
 	Algorithm int64 `cbor:"3,keyasint" json:"alg"` // required
 }
 
+// https://datatracker.ietf.org/doc/html/rfc8152#section-13.2
 type OKPPublicKeyData struct {
 	PublicKeyDataBase
+
+	Curve       int64  `cbor:"-1,keyasint" json:"crv"`
+	XCoordinate []byte `cbor:"-2,keyasint" json:"x"`
 }
 
 // EC2PublicKeyData represents an Elliptic Curve public key
@@ -51,7 +69,10 @@ type EC2PublicKeyData struct {
 }
 
 func (p *OKPPublicKeyData) Verify(data []byte, signature []byte) (bool, error) {
-	return false, nil
+	var key ed25519.PublicKey = make([]byte, ed25519.PublicKeySize)
+	copy(key, p.XCoordinate)
+
+	return ed25519.Verify(key, data, signature), nil
 }
 
 func (p *EC2PublicKeyData) Verify(data []byte, signature []byte) (bool, error) {

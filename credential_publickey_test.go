@@ -3,6 +3,7 @@ package webauthn_test
 import (
 	"crypto"
 	"crypto/ecdsa"
+	"crypto/ed25519"
 	"crypto/elliptic"
 	"crypto/rand"
 	"testing"
@@ -11,6 +12,33 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestOKPPublicKeyData_Verify(t *testing.T) {
+	t.Parallel()
+
+	data := []byte("ABCD1234")
+	publicKey, privateKey, err := ed25519.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+
+	signature := ed25519.Sign(privateKey, data)
+
+	okpPublicKeyData := webauthn.OKPPublicKeyData{
+		PublicKeyDataBase: webauthn.PublicKeyDataBase{
+			KeyType:   int64(webauthn.COSEKeyTypeOKP),
+			Algorithm: int64(webauthn.AlgEdDSA),
+		},
+		Curve:       int64(webauthn.OctetKeyPairEd25519),
+		XCoordinate: publicKey,
+	}
+
+	valid, err := okpPublicKeyData.Verify(data, signature)
+	assert.NoError(t, err)
+	assert.True(t, valid)
+
+	valid, err = okpPublicKeyData.Verify([]byte("1234ABCD"), signature)
+	assert.NoError(t, err)
+	assert.False(t, valid)
+}
 
 func TestEC2PublicKeyData_Verify(t *testing.T) {
 	t.Parallel()
