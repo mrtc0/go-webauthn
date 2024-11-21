@@ -112,3 +112,58 @@ func TestRegistrationCelemonyVerifier_VerifyAuthenticatorDataFlags(t *testing.T)
 		})
 	}
 }
+
+func TestRegistrationCelemonyVerifier_VerifyPublicKeyAlgParams(t *testing.T) {
+	t.Parallel()
+
+	testCases := map[string]struct {
+		params []webauthn.PublicKeyCredentialParameters
+		expect bool
+	}{
+		"OK: valid alg param": {
+			params: []webauthn.PublicKeyCredentialParameters{
+				{
+					Type: webauthn.PublicKeyCredentialTypePublicKey,
+					Alg:  webauthn.AlgES256,
+				},
+			},
+			expect: true,
+		},
+		"NG: invalid arg param": {
+			params: []webauthn.PublicKeyCredentialParameters{
+				{
+					Type: webauthn.PublicKeyCredentialTypePublicKey,
+					Alg:  webauthn.AlgES384,
+				},
+			},
+		},
+	}
+
+	for name, tc := range testCases {
+		tc := tc
+
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			registrationResponse := testutils.NewRegistrationCelemonyResponse(
+				t,
+				"example.com",
+				[]byte("123456789"),
+				webauthn.FlagUserPresent|webauthn.FlagUserVerified|webauthn.FlagAttestedCredentialData,
+				"none",
+			)
+
+			verifier, err := webauthn.NewRegistrationCelemonyVerifier(*registrationResponse)
+			require.NoError(t, err)
+
+			actual, err := verifier.VerifyPublicKeyAlgParams(tc.params)
+			assert.Equal(t, tc.expect, actual)
+
+			if tc.expect {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
