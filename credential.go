@@ -115,6 +115,10 @@ func (c *CredentialRecord) UpdateState(authenticatorAssertionResponse *Authentic
 
 // The credential public key encoded in COSE_Key format, using the CTAP2 canonical CBOR encoding form.
 func (r *CredentialRecord) GetPublicKey() (PublicKeyData, error) {
+	return ParsePublicKey(r.PublicKey)
+}
+
+func ParsePublicKey(publicKey []byte) (PublicKeyData, error) {
 	pk := &PublicKeyDataBase{}
 
 	// ref. https://fidoalliance.org/specs/fido-v2.0-ps-20190130/fido-client-to-authenticator-protocol-v2.0-ps-20190130.html#ctap2-canonical-cbor-encoding-form
@@ -134,7 +138,7 @@ func (r *CredentialRecord) GetPublicKey() (PublicKeyData, error) {
 		return nil, err
 	}
 
-	_, err = mode.UnmarshalFirst(r.PublicKey, &pk)
+	_, err = mode.UnmarshalFirst(publicKey, &pk)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +146,7 @@ func (r *CredentialRecord) GetPublicKey() (PublicKeyData, error) {
 	switch COSEKeyType(pk.KeyType) {
 	case COSEKeyTypeOKP:
 		octetPublicKey := &OKPPublicKeyData{}
-		_, err := mode.UnmarshalFirst(r.PublicKey, octetPublicKey)
+		_, err := mode.UnmarshalFirst(publicKey, octetPublicKey)
 		if err != nil {
 			return nil, err
 		}
@@ -150,7 +154,7 @@ func (r *CredentialRecord) GetPublicKey() (PublicKeyData, error) {
 		return octetPublicKey, nil
 	case COSEKeyTypeEC2:
 		ec2PublicKey := &EC2PublicKeyData{}
-		_, err := mode.UnmarshalFirst(r.PublicKey, ec2PublicKey)
+		_, err := mode.UnmarshalFirst(publicKey, ec2PublicKey)
 		if err != nil {
 			return nil, err
 		}
