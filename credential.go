@@ -141,7 +141,13 @@ func (r *CredentialRecord) GetPublicKey() (PublicKeyData, error) {
 
 	switch COSEKeyType(pk.KeyType) {
 	case COSEKeyTypeOKP:
-		return nil, fmt.Errorf("unsupported key type: %d", pk.KeyType)
+		octetPublicKey := &OKPPublicKeyData{}
+		_, err := mode.UnmarshalFirst(r.PublicKey, octetPublicKey)
+		if err != nil {
+			return nil, err
+		}
+
+		return octetPublicKey, nil
 	case COSEKeyTypeEC2:
 		ec2PublicKey := &EC2PublicKeyData{}
 		_, err := mode.UnmarshalFirst(r.PublicKey, ec2PublicKey)

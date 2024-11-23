@@ -75,6 +75,14 @@ func (p *OKPPublicKeyData) Verify(data []byte, signature []byte) (bool, error) {
 	return ed25519.Verify(key, data, signature), nil
 }
 
+func (p *OKPPublicKeyData) GetKeyType() int64 {
+	return p.PublicKeyDataBase.KeyType
+}
+
+func (p *OKPPublicKeyData) GetAlgorithm() int64 {
+	return p.PublicKeyDataBase.Algorithm
+}
+
 func (p *EC2PublicKeyData) Verify(data []byte, signature []byte) (bool, error) {
 	var curve elliptic.Curve
 	var hasher crypto.Hash
