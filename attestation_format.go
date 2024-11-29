@@ -3,6 +3,7 @@ package webauthn
 import (
 	"bytes"
 	"crypto/x509"
+	"encoding/asn1"
 	"fmt"
 	"time"
 )
@@ -141,7 +142,71 @@ func (p *PackedAttestationStatementVerifier) verifyBasicAttestation(certs []any,
 		return false, fmt.Errorf("invalid signature: %w", err)
 	}
 
-	// TODO: 2-2 .Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation Statement Certificate Requirements.
+	// 2-2 .Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation Statement Certificate Requirements.
+	// Version MUST be set to 3 (which is indicated by an ASN.1 INTEGER with value 2).
+	if attestnCert.Version != 3 {
+		return false, fmt.Errorf("invalid version")
+	}
+
+	// Subject field MUST be set to:
+	//	Subject-C ... ISO 3166 code
+	//	Subject-O ... Legal name
+	//	Subject-OU ... "Authenticator Attestation"
+	//	Subject-CN ... A UTF8String of the vendor's choosing
+	// TODO: The code should be verified for accuracy
+	if len(attestnCert.Subject.Country) == 0 {
+		return false, fmt.Errorf("invalid country")
+	}
+
+	if len(attestnCert.Subject.Organization) == 0 {
+		return false, fmt.Errorf("invalid organization")
+	}
+
+	if len(attestnCert.Subject.OrganizationalUnit) == 0 || attestnCert.Subject.OrganizationalUnit[0] != "Authenticator Attestation" {
+		return false, fmt.Errorf("invalid organizational unit")
+	}
+
+	if len(attestnCert.Subject.CommonName) == 0 {
+		return false, fmt.Errorf("invalid common name")
+	}
+
+	// If the related attestation root certificate is used for multiple authenticator models,
+	// the Extension OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) MUST be present,
+	// containing the AAGUID as a 16-byte OCTET STRING.
+	// The extension MUST NOT be marked as critical.
+	var foundAAGUID []byte
+
+	oid := asn1.ObjectIdentifier{1, 3, 6, 1, 4, 1, 45724, 1, 1, 4}
+	for _, ext := range attestnCert.Extensions {
+		if ext.Id.Equal(oid) {
+			if ext.Critical {
+				return false, fmt.Errorf("this attestation certificate mardked as critical")
+			}
+
+			foundAAGUID = ext.Value
+			break
+		}
+	}
+
+	// If attestnCert contains an extension with OID 1.3.6.1.4.1.45724.1.1.4 (id-fido-gen-ce-aaguid) verify that the value of this extension matches the aaguid in authenticatorData.
+	if len(foundAAGUID) > 0 {
+		authenticatorData := AuthenticatorData{}
+		if err := authenticatorData.Unmarshal(p.AuthData); err != nil {
+			return false, fmt.Errorf("failed to unmarshal authenticator data: %w", err)
+		}
+
+		unMarshalledAAGUID := []byte{}
+		asn1.Unmarshal(foundAAGUID, &unMarshalledAAGUID)
+
+		if !bytes.Equal(authenticatorData.AttestedCredentialData.AAGUID, unMarshalledAAGUID) {
+			return false, fmt.Errorf("AAGUID mismatch")
+		}
+	}
+
+	// The Basic Constraints extension MUST have the CA component set to false.
+	if attestnCert.IsCA {
+		return false, fmt.Errorf("this certificate is CA")
+	}
 
 	return true, nil
 }
