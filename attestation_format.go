@@ -281,7 +281,11 @@ func DetermineAttestaionStatement(format string, attStmt map[string]any, authDat
 	// ref. https://forums.developer.apple.com/forums/thread/742434
 	switch AttestationFormat(format) {
 	case AttestationFormatPacked:
-		return &PackedAttestationStatementVerifier{}, nil
+		return &PackedAttestationStatementVerifier{
+			AttStmt:        attStmt,
+			AuthData:       authData,
+			ClientDataHash: hash,
+		}, nil
 	case AttestationFormatTPM:
 		return &TPMAttestationStatementVerifier{}, nil
 	case AttestationFormatAndroidKey:
