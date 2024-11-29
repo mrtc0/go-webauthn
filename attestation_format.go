@@ -1,7 +1,10 @@
 package webauthn
 
 import (
+	"bytes"
+	"crypto/x509"
 	"fmt"
+	"time"
 )
 
 // https://www.iana.org/assignments/webauthn/webauthn.xhtml
@@ -57,10 +60,18 @@ func (p *PackedAttestationStatementVerifier) Verify() (attestationType string, x
 		return "", nil, fmt.Errorf("attestation statement missing sig")
 	}
 
-	_, exists = p.AttStmt["x5c"].([]any)
+	x5c, exists := p.AttStmt["x5c"].([]any)
 	if exists {
-		// TODO: support x5c
-		return "", nil, fmt.Errorf("unsupported x5c")
+		valid, err := p.verifyBasicAttestation(x5c, alg, sig)
+		if err != nil {
+			return "", nil, fmt.Errorf("failed to verify basic attestation: %w", err)
+		}
+
+		if !valid {
+			return "", nil, fmt.Errorf("invalid signature")
+		}
+
+		return "Basic", nil, nil
 	}
 
 	// 3. If x5c is not present, self attestation is in use.
@@ -74,6 +85,65 @@ func (p *PackedAttestationStatementVerifier) Verify() (attestationType string, x
 	}
 
 	return "Self", nil, nil
+}
+
+func (p *PackedAttestationStatementVerifier) verifyBasicAttestation(certs []any, alg int64, sig []byte) (bool, error) {
+	attestnCertBytes := certs[0].([]byte)
+	attestnCert, err := x509.ParseCertificate(attestnCertBytes)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse attestation certificate: %w", err)
+	}
+
+	if attestnCert.NotBefore.After(time.Now()) || attestnCert.NotAfter.Before(time.Now()) {
+		return false, fmt.Errorf("attestation certificate is expired")
+	}
+
+	rootCertPool := x509.NewCertPool()
+	intermediateCertPool := x509.NewCertPool()
+
+	for _, cert := range certs[1:] {
+		certBytes, ok := cert.([]byte)
+		if !ok {
+			return false, fmt.Errorf("failed to parse certificate on x5c")
+		}
+
+		x509Cert, err := x509.ParseCertificate(certBytes)
+		if err != nil {
+			return false, fmt.Errorf("failed to parse certificate on x5c: %w", err)
+		}
+
+		if x509Cert.NotBefore.After(time.Now()) || x509Cert.NotAfter.Before(time.Now()) {
+			return false, fmt.Errorf("certificate is expired")
+		}
+
+		if bytes.Equal(x509Cert.RawSubject, x509Cert.RawIssuer) && x509Cert.IsCA {
+			rootCertPool.AddCert(x509Cert)
+		} else {
+			intermediateCertPool.AddCert(x509Cert)
+		}
+	}
+
+	opts := x509.VerifyOptions{
+		Roots:         rootCertPool,
+		Intermediates: intermediateCertPool,
+	}
+
+	if _, err := attestnCert.Verify(opts); err != nil {
+		return false, fmt.Errorf("failed to verify certificate: %w", err)
+	}
+
+	// 2-1. Verify that sig is a valid signature over the concatenation of authenticatorData
+	// and clientDataHash using the attestation public key in attestnCert with
+	// the algorithm specified in alg.
+	signatureAlg := SignatureAlgorithm(COSEAlgorithmIdentifier(alg))
+	verificationData := append(p.AuthData, p.ClientDataHash...)
+	if err := attestnCert.CheckSignature(signatureAlg, verificationData, sig); err != nil {
+		return false, fmt.Errorf("invalid signature: %w", err)
+	}
+
+	// TODO: 2-2 .Verify that attestnCert meets the requirements in § 8.2.1 Packed Attestation Statement Certificate Requirements.
+
+	return true, nil
 }
 
 func (p *PackedAttestationStatementVerifier) verifySelfAttestation(alg int64, sig []byte) (bool, error) {

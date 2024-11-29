@@ -1,5 +1,7 @@
 package webauthn
 
+import "crypto/x509"
+
 // https://www.w3.org/TR/webauthn-3/#sctn-alg-identifier
 type COSEAlgorithmIdentifier int
 
@@ -186,4 +188,25 @@ func defaultCredentialParameters() []PublicKeyCredentialParameters {
 	}
 
 	return defaultPublicKeyCredentialParameters
+}
+
+func SignatureAlgorithm(coseAlg COSEAlgorithmIdentifier) x509.SignatureAlgorithm {
+	switch coseAlg {
+	case AlgES256:
+		return x509.ECDSAWithSHA256
+	case AlgES384:
+		return x509.ECDSAWithSHA384
+	case AlgES512:
+		return x509.ECDSAWithSHA512
+	case AlgPS256:
+		return x509.SHA256WithRSAPSS
+	case AlgPS384:
+		return x509.SHA384WithRSAPSS
+	case AlgPS512:
+		return x509.SHA512WithRSAPSS
+	case AlgEdDSA:
+		return x509.PureEd25519
+	default:
+		return x509.UnknownSignatureAlgorithm
+	}
 }
