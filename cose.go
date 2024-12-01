@@ -7,6 +7,8 @@ type COSEAlgorithmIdentifier int
 
 // https://www.iana.org/assignments/cose/cose.xhtml#algorithms
 const (
+	// AlgRS256 is RSASSA-PKCS1-v1_5 using SHA-256
+	AlgRS256 COSEAlgorithmIdentifier = -257
 	// AlgHSS_LMS is HSS/LMS hash-based digital signature
 	AlgHSS_LMS COSEAlgorithmIdentifier = -46
 	// AlgSHAKE256 is SHAKE-256 512-bit Hash Value
@@ -121,6 +123,8 @@ const (
 
 func defaultCredentialParameters() []PublicKeyCredentialParameters {
 	defaultAlgs := []COSEAlgorithmIdentifier{
+		// ref. https://chromium.googlesource.com/chromium/src/+/main/content/browser/webauth/pub_key_cred_params.md
+		AlgRS256,
 		AlgHSS_LMS,
 		AlgSHAKE256,
 		AlgSHA512,
