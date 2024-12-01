@@ -127,27 +127,15 @@ func (a *registrationCelemonyVerifier) VerifyAttestationStatement() (bool, error
 }
 
 func NewRegistrationCelemonyVerifier(registrationResponse RegistrationResponseJSON) (RegistrationCelemonyVerifier, error) {
-	// Step 3. Let response be credential.response.
-	// If response is not an instance of AuthenticatorAttestationResponse,
-	// abort the ceremony with a user-visible error.
-	response, err := registrationResponse.Response.Parse()
+	response, err := registrationResponse.Parse()
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-
-	c := response.GetParsedClientDataJSON()
-
-	// Step 12. Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure to obtain the attestation statement format fmt, the authenticator data authData, and the attestation statement attStmt.
-	attestationObject := response.AttestationObject
-	authenticatorData := AuthenticatorData{}
-	if err := authenticatorData.Unmarshal(attestationObject.AuthData); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal authenticator data: %w", err)
+		return nil, fmt.Errorf("failed to parse registration response: %w", err)
 	}
 
 	return &registrationCelemonyVerifier{
-		response:          *response,
-		clientDataJSON:    c,
-		attestationObject: attestationObject,
-		authenticatorData: authenticatorData,
+		response:          response.Response,
+		clientDataJSON:    response.ClientDataJSON,
+		attestationObject: response.AttestationObject,
+		authenticatorData: response.AuthenticatorData,
 	}, nil
 }

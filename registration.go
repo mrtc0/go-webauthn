@@ -13,6 +13,19 @@ var (
 	}
 )
 
+type RegistrationResponse struct {
+	ID                      string
+	RawID                   string
+	Response                AuthenticatorAttestationResponse
+	ClientDataJSON          CollectedClientData
+	AttestationObject       AttestationObject
+	AuthenticatorData       AuthenticatorData
+	AuthenticatorAttachment string
+	ClientExtensionResults  AuthenticationExtensionsClientOutputsJSON
+	Type                    string
+	RawResponse             RegistrationResponseJSON
+}
+
 type RegistrationResponseJSON struct {
 	ID                      string                                    `json:"id"`
 	RawID                   string                                    `json:"rawId"`
@@ -20,6 +33,39 @@ type RegistrationResponseJSON struct {
 	AuthenticatorAttachment string                                    `json:"authenticatorAttachment"`
 	ClientExtensionResults  AuthenticationExtensionsClientOutputsJSON `json:"clientExtensionResults"`
 	Type                    string                                    `json:"type"`
+}
+
+func (r RegistrationResponseJSON) Parse() (*RegistrationResponse, error) {
+	// Step 3. Let response be credential.response.
+	// If response is not an instance of AuthenticatorAttestationResponse,
+	// abort the ceremony with a user-visible error.
+	response, err := r.Response.Parse()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	c := response.GetParsedClientDataJSON()
+
+	// Step 12. Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure to obtain the attestation statement format fmt, the authenticator data authData, and the attestation statement attStmt.
+	attestationObject := response.AttestationObject
+	authenticatorData := AuthenticatorData{}
+	if err := authenticatorData.Unmarshal(attestationObject.AuthData); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal authenticator data: %w", err)
+	}
+
+	return &RegistrationResponse{
+		ID:                      r.ID,
+		RawID:                   r.RawID,
+		Response:                *response,
+		ClientDataJSON:          c,
+		AttestationObject:       attestationObject,
+		AuthenticatorData:       authenticatorData,
+		AuthenticatorAttachment: r.AuthenticatorAttachment,
+		ClientExtensionResults:  r.ClientExtensionResults,
+		Type:                    r.Type,
+		RawResponse:             r,
+	}, nil
+
 }
 
 type RegistrationCeremonyOption func(*PublicKeyCredentialCreationOptions)
