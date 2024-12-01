@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/Code-Hex/dd/p"
 	"github.com/mrtc0/go-webauthn"
 )
 
@@ -73,7 +74,7 @@ func (u *usersService) CurrentUser(sessionID string) (*User, error) {
 
 func (u *usersService) CreatePasskeyRegistrationOptions(rpConfig webauthn.RPConfig, userSessionID string, user User) (*webauthn.PublicKeyCredentialCreationOptions, *PasskeySession, error) {
 	webauthnUser := user.ToWebAuthnUser(nil)
-	options, webauthnSession, err := webauthn.CreateRegistrationCeremonyOptions(rpConfig, *webauthnUser)
+	options, webauthnSession, err := webauthn.CreateRegistrationCeremonyOptions(rpConfig, *webauthnUser, webauthn.WithAttestationPreference(webauthn.AttestationConveyancePreferenceIndirect))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -87,6 +88,8 @@ func (u *usersService) CreatePasskeyRegistrationOptions(rpConfig webauthn.RPConf
 }
 
 func (u *usersService) PasskeyRegistration(rpConfig webauthn.RPConfig, user User, userSessionID string, registrationResponse webauthn.RegistrationResponseJSON) error {
+	debugRegistrationResponse(registrationResponse)
+
 	session, err := u.passkeySessionRepository.FindByID(userSessionID)
 	if err != nil {
 		return err
@@ -109,7 +112,7 @@ func (u *usersService) PasskeyRegistration(rpConfig webauthn.RPConfig, user User
 
 func (u *usersService) CreatePasskeyAuthenticationOptions(rpConfig webauthn.RPConfig) (*webauthn.PublicKeyCredentialRequestOptions, *PasskeySession, error) {
 	sessionID := GenerateID()
-	options, session, err := webauthn.CreateAuthenticationOptions(rpConfig, []byte(sessionID))
+	options, session, err := webauthn.CreateAuthenticationOptions(rpConfig, []byte(sessionID), webauthn.WithAttestaion(webauthn.AttestationConveyancePreferenceIndirect))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -123,6 +126,7 @@ func (u *usersService) CreatePasskeyAuthenticationOptions(rpConfig webauthn.RPCo
 }
 
 func (u *usersService) LoginWithPasskey(rpConfig webauthn.RPConfig, passkeySessionID string, response webauthn.AuthenticationResponseJSON) (*User, *UserSession, error) {
+	debugAuthenticationResponse(response)
 	passkeySession, err := u.passkeySessionRepository.FindByID(passkeySessionID)
 	if err != nil {
 		return nil, nil, err
@@ -137,7 +141,7 @@ func (u *usersService) LoginWithPasskey(rpConfig webauthn.RPConfig, passkeySessi
 		UserVerification:   passkeySession.UserVerification,
 	}
 
-	webauthnUser, _, err := webauthn.VerifyDiscoverableCredentialAuthenticationResponse(
+	webauthnUser, credentialRecord, err := webauthn.VerifyDiscoverableCredentialAuthenticationResponse(
 		param,
 		u.discoverUserPaskey,
 		response,
@@ -149,6 +153,17 @@ func (u *usersService) LoginWithPasskey(rpConfig webauthn.RPConfig, passkeySessi
 	}
 
 	user := WebAuthnUserToUser(webauthnUser)
+
+	passkey, err := u.userPasskeyRepository.FindPasskeyByID(credentialRecord.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	passkey.Credential = *credentialRecord
+	if err := u.userPasskeyRepository.SavePaskey(&passkey); err != nil {
+		return nil, nil, err
+	}
+
 	session := NewUserSession(user.ID)
 	if err := u.userSessionRepository.CreateUserSession(session); err != nil {
 		return nil, nil, err
@@ -158,7 +173,7 @@ func (u *usersService) LoginWithPasskey(rpConfig webauthn.RPConfig, passkeySessi
 }
 
 func (u *usersService) discoverUserPaskey(credentialRawID []byte, userHandle string) (*webauthn.WebAuthnUser, *webauthn.CredentialRecord, error) {
-	passkeys, err := u.userPasskeyRepository.FindUserPasskeys(userHandle)
+	passkeys, err := u.userPasskeyRepository.FindPasskeysByUserID(userHandle)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -181,6 +196,16 @@ func (u *usersService) discoverUserPaskey(credentialRawID []byte, userHandle str
 	}
 
 	return nil, nil, fmt.Errorf("credential not found")
+}
+
+func debugRegistrationResponse(response webauthn.RegistrationResponseJSON) {
+	r, _ := response.Parse()
+	p.P(r)
+}
+
+func debugAuthenticationResponse(response webauthn.AuthenticationResponseJSON) {
+	r, _ := response.Parse()
+	p.P(r)
 }
 
 func NewUsersService(

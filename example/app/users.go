@@ -25,7 +25,8 @@ type UserRepository interface {
 
 type UserPasskeyRepository interface {
 	SavePaskey(userPasskey *UserPasskey) error
-	FindUserPasskeys(userID string) ([]UserPasskey, error)
+	FindPasskeysByUserID(userID string) ([]UserPasskey, error)
+	FindPasskeyByID(id []byte) (UserPasskey, error)
 }
 
 func NewUser(email, password string) *User {

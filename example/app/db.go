@@ -66,12 +66,20 @@ func (u *userPasskeyRepositoryImpl) SavePaskey(userPasskey *UserPasskey) error {
 	return u.Save(userPasskey)
 }
 
-func (u *userPasskeyRepositoryImpl) FindUserPasskeys(userID string) ([]UserPasskey, error) {
+func (u *userPasskeyRepositoryImpl) FindPasskeysByUserID(userID string) ([]UserPasskey, error) {
 	var userPasskeys []UserPasskey
 	if err := u.Find("UserID", userID, &userPasskeys); err != nil {
 		return nil, err
 	}
 	return userPasskeys, nil
+}
+
+func (u *userPasskeyRepositoryImpl) FindPasskeyByID(id []byte) (UserPasskey, error) {
+	var userPasskey UserPasskey
+	if err := u.One("ID", id, &userPasskey); err != nil {
+		return UserPasskey{}, err
+	}
+	return userPasskey, nil
 }
 
 func (u *userSessionRepositoryImpl) CreateUserSession(session *UserSession) error {
