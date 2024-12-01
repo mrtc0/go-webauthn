@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-white">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Index Page</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@simplewebauthn/browser@11.0.0/dist/bundle/index.umd.min.js"
+        integrity="sha384-MEoU+35r/Mcpi7hzGCSKXkm+Yu7nRyDqV8z+GjTNBhxzV/JrQXe88JTG1ol0+F1e"
+        crossorigin="anonymous"></script>
+</head>
+
+<body class="h-full">
+    <div class="bg-white shadow sm:rounded-lg">
+        <div class="px-4 py-5 sm:p-6">
+            <div class="space-y-12">
+                <div class="pb-12">
+                    <h1 class="text-base/7 font-semibold text-gray-900">Profile</h1>
+                    <p class="mt-1 text-sm/6 text-gray-600">Hello, <span id="currentUser"></span></p>
+                </div>
+            </div>
+            <h3 class="text-base font-semibold text-gray-900">Passkeys</h3>
+            <div class="mt-5">
+                <button type="button" onclick="passkeyRegistration()"
+                    class="inline-flex items-center rounded-md bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500">Register
+                    a new Passkey</button>
+            </div>
+
+            <div class="mt-10">
+                <div class="relative">
+                    <div class="absolute inset-0 flex items-center" aria-hidden="true">
+                        <div class="w-full border-t border-gray-200"></div>
+                    </div>
+                    <div class="relative flex justify-center text-sm/6 font-medium">
+                    </div>
+                </div>
+            </div>
+            <div class="mt-5">
+                <button type="button" onclick="logout()"
+                    class="inline-flex items-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-500">Logout</button>
+            </div>
+        </div>
+    </div>
+    <script>
+        (async () => {
+            try {
+                const data = await fetch('/api/user');
+                const user = await data.json();
+
+                document.getElementById('currentUser').innerText = user.email;
+            } catch (error) {
+                window.location.href = '/login';
+            }
+        })();
+
+        const passkeyRegistration = async () => {
+            const data = await fetch('/api/user/passkey/registration/start');
+            const optionsJSON = await data.json();
+            console.log(optionsJSON)
+
+            const attResp = await SimpleWebAuthnBrowser.startRegistration({ optionsJSON })
+            console.log(attResp)
+
+            const verificationResp = await fetch('/api/user/passkey/registration', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(attResp)
+            })
+
+            const verificationJSON = await verificationResp.json();
+            console.log(verificationJSON)
+            alert('Passkey registration success');
+        }
+
+        const logout = async () => {
+            const data = await fetch('/api/logout');
+            if (data.status === 200) {
+                window.location.href = '/login';
+            } else {
+                alert('Logout failed');
+            }
+        }
+    </script>
+</body>
+
+</html>

@@ -20,11 +20,17 @@ func main() {
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			switch r.URL.Path {
 			case "/":
-				http.ServeFile(w, r, "index.html")
+				http.ServeFile(w, r, "templates/index.html")
+			case "/login":
+				http.ServeFile(w, r, "templates/login.html")
+			case "/signup":
+				http.ServeFile(w, r, "templates/signup.html")
 			case "/api/signup":
 				con.usersController.Signup(w, r)
 			case "/api/login":
 				con.usersController.LoginWithPassword(w, r)
+			case "/api/logout":
+				con.usersController.Logout(w, r)
 			case "/api/user/passkey/registration/start":
 				con.usersController.PasskeyRegistrationStart(w, r)
 			case "/api/user/passkey/registration":

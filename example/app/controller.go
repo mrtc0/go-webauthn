@@ -94,6 +94,17 @@ func (u *usersController) LoginWithPassword(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusOK)
 }
 
+func (u *usersController) Logout(w http.ResponseWriter, r *http.Request) {
+	// The session should be deleted from the database,
+	// but this is omitted for the sample application.
+	http.SetCookie(w, &http.Cookie{
+		Name:  "session",
+		Value: "",
+		Path:  "/",
+	})
+	w.WriteHeader(http.StatusOK)
+}
+
 func (u *usersController) PasskeyRegistrationStart(w http.ResponseWriter, r *http.Request) {
 	sessionID, err := r.Cookie("session")
 	if err != nil {
